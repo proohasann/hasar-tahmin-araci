@@ -424,14 +424,86 @@ select,
     -webkit-text-fill-color: var(--input-text) !important;
 }}
 
-/* Selectbox ok simgesi ve svg simgeleri */
+/* Selectbox Açılır Ok Butonu ve SVG Simgeleri (Siyah Kutu Olmasını Engeller) */
+[data-testid="stSelectbox"] button,
+[data-testid="stSelectbox"] [aria-label="Open"],
+[data-testid="stSelectbox"] [aria-label="Clear value"],
+.stSelectbox button {
+    background-color: transparent !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
 [data-testid="stSelectbox"] svg,
 [data-testid="stSelectbox"] svg path,
 .stSelectbox svg,
-.stSelectbox svg path {{
+.stSelectbox svg path {
     fill: var(--input-text) !important;
     color: var(--input-text) !important;
-}}
+}
+
+/* ==================================================================== */
+/* 6.1 AÇILIR LİSTE MENÜSÜ (DROPDOWN POPOVER & VIRTUAL LIST)            */
+/* ==================================================================== */
+[data-testid="stSelectboxVirtualDropdown"],
+[data-testid="stSelectboxVirtualDropdown"] > div,
+[data-testid="stSelectboxVirtualDropdown"] ul,
+[data-testid="stSelectboxVirtualDropdown"] li,
+div[data-floating-ui-portal] > div,
+div[data-floating-ui-portal] ul,
+div[data-floating-ui-portal] li,
+div[role="listbox"],
+ul[role="listbox"],
+li[role="option"] {
+    background-color: var(--table-bg) !important;
+    background: var(--table-bg) !important;
+    color: var(--input-text) !important;
+    border-color: var(--border-color) !important;
+}
+
+[data-testid="stSelectboxVirtualDropdown"],
+div[data-floating-ui-portal] > div {
+    border: 1.5px solid var(--border-color) !important;
+    border-radius: 14px !important;
+    box-shadow: var(--card-shadow) !important;
+    overflow: hidden !important;
+}
+
+[data-testid="stSelectboxVirtualDropdown"] li,
+div[data-floating-ui-portal] li,
+li[role="option"] {
+    padding: 10px 14px !important;
+    color: var(--input-text) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    cursor: pointer !important;
+    background-color: var(--table-bg) !important;
+    background: var(--table-bg) !important;
+}
+
+[data-testid="stSelectboxVirtualDropdown"] li:last-child,
+div[data-floating-ui-portal] li:last-child,
+li[role="option"]:last-child {
+    border-bottom: none !important;
+}
+
+[data-testid="stSelectboxVirtualDropdown"] li:hover,
+[data-testid="stSelectboxVirtualDropdown"] li[data-focused="true"],
+[data-testid="stSelectboxVirtualDropdown"] li[aria-selected="true"],
+[data-testid="stSelectboxVirtualDropdown"] li[data-hovered="true"],
+div[data-floating-ui-portal] li:hover,
+li[role="option"]:hover,
+li[role="option"][aria-selected="true"] {
+    background-color: var(--stepper-hover) !important;
+    background: var(--stepper-hover) !important;
+    color: var(--accent-color) !important;
+    font-weight: 700 !important;
+}
+
+[data-testid="stSelectboxVirtualDropdown"] li *,
+div[data-floating-ui-portal] li *,
+li[role="option"] * {
+    color: inherit !important;
+}
 
 /* Number input + ve - butonları */
 [data-testid="stNumberInputStepDown"],
