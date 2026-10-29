@@ -454,14 +454,47 @@ select,
     border: none !important;
     box-shadow: none !important;
 }
+
+/* Şeffaf bounding box path'leri ASLA doldurulmamalı */
+svg path[fill="none"],
+[data-testid="stSelectbox"] svg path[fill="none"],
+.stSelectbox svg path[fill="none"],
+.e1oobldh2 svg path[fill="none"],
+button svg path[fill="none"] {
+    fill: none !important;
+}
+
 [data-testid="stSelectbox"] svg,
-[data-testid="stSelectbox"] svg path,
 .stSelectbox svg,
-.stSelectbox svg path,
-.e1oobldh2 svg,
-.e1oobldh2 svg path {
-    fill: var(--input-text) !important;
+.e1oobldh2 svg {
     color: var(--input-text) !important;
+}
+
+[data-testid="stSelectbox"] svg path:not([fill="none"]),
+.stSelectbox svg path:not([fill="none"]),
+.e1oobldh2 svg path:not([fill="none"]) {
+    fill: var(--input-text) !important;
+}
+
+/* Tooltip ve Popover Düzeltmeleri (Siyah Kutu Olmasını Engeller) */
+[data-testid="stTooltipContent"],
+div[data-baseweb="tooltip"],
+div[role="tooltip"],
+.stTooltipContent,
+[data-baseweb="popover"] {
+    background-color: var(--table-bg) !important;
+    background: var(--table-bg) !important;
+    color: var(--text-color) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 8px !important;
+    box-shadow: var(--card-shadow) !important;
+}
+[data-testid="stTooltipContent"] *,
+div[data-baseweb="tooltip"] *,
+div[role="tooltip"] *,
+.stTooltipContent * {
+    color: var(--text-color) !important;
+    background: transparent !important;
 }
 
 /* Açılır Liste Menüsü (Dropdown Popover & Virtual List) */
@@ -885,7 +918,7 @@ with st.sidebar:
     with col_t1:
         st.markdown(f"**Tema:** `{tema_ad}`")
     with col_t2:
-        if st.button("🌓 Değiştir", help="Açık ve Koyu tema arasında geçiş yapın", use_container_width=True):
+        if st.button("🌓 Değiştir", use_container_width=True):
             st.session_state.koyu_tema = not st.session_state.koyu_tema
             st.rerun()
 
@@ -976,7 +1009,7 @@ with sekme1:
             st.markdown("<span style='font-size: 0.82rem; font-weight: 700; color: var(--subtext-color);'>⚡ Hızlı Senaryo Doldur:</span>", unsafe_allow_html=True)
             col_p1, col_p2, col_p3 = st.columns(3)
             with col_p1:
-                if st.button("🏢 Az Hasarlı", help="Tipik 5 katlı yeni betonarme bina", use_container_width=True):
+                if st.button("🏢 Az Hasarlı", use_container_width=True):
                     st.session_state["val_yapi"] = "Betonarme"
                     st.session_state["val_kat"] = 5
                     st.session_state["val_yil"] = 2008
@@ -987,7 +1020,7 @@ with sekme1:
                     st.session_state["val_kol"] = 0
                     st.rerun()
             with col_p2:
-                if st.button("🏚️ Ağır Hasarlı", help="Riskli 3 katlı eski yığma bina", use_container_width=True):
+                if st.button("🏚️ Ağır Hasarlı", use_container_width=True):
                     st.session_state["val_yapi"] = "Yığma"
                     st.session_state["val_kat"] = 3
                     st.session_state["val_yil"] = 1985
@@ -998,7 +1031,7 @@ with sekme1:
                     st.session_state["val_kol"] = 1
                     st.rerun()
             with col_p3:
-                if st.button("🔄 Sıfırla", help="Varsayılan değerlere dön", use_container_width=True):
+                if st.button("🔄 Sıfırla", use_container_width=True):
                     for k in ["val_yapi", "val_kat", "val_yil", "val_bolge", "val_pga", "val_defo", "val_dos", "val_kol"]:
                         st.session_state.pop(k, None)
                     st.rerun()
