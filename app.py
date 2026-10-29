@@ -195,9 +195,92 @@ def aralik_uyarilari(meta, bilgi):
 
 
 # ===== ARAYÜZ =====
-st.set_page_config(page_title="Hasar Tahmin Aracı", layout="wide")
-st.title("Deprem Sonrası Hasar Tahmin Aracı")
-st.caption("Eğitim amaçlı sentetik veriyle eğitilmiş bir modeldir; gerçek bir hasar tespiti yerine geçmez.")
+st.set_page_config(page_title="Hasar Tahmin Aracı | Material You", page_icon="🏢", layout="wide")
+
+# Material You / Material Design 3 CSS (Koyu ve Açık Tema Uyumlu)
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Material You Kart Stili (Açık ve Koyu Temaya Duyarlı) */
+.m3-surface {
+    background-color: var(--secondary-background-color);
+    border: 1px solid rgba(128, 128, 128, 0.15);
+    border-radius: 20px;
+    padding: 22px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+    transition: all 0.25s ease-in-out;
+}
+.m3-surface:hover {
+    border-color: rgba(33, 150, 243, 0.35);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.07);
+}
+
+/* Yuvarlak Material You Butonları */
+.stButton > button {
+    border-radius: 9999px !important;
+    font-weight: 600 !important;
+    padding: 10px 28px !important;
+    letter-spacing: 0.3px !important;
+    transition: all 0.2s ease !important;
+    border: none !important;
+}
+.stButton > button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(33, 150, 243, 0.25) !important;
+}
+
+/* Sekmeler (Material 3 Segmented Pills) */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+    background-color: var(--secondary-background-color);
+    padding: 6px;
+    border-radius: 18px;
+    border: 1px solid rgba(128, 128, 128, 0.12);
+}
+.stTabs [data-baseweb="tab"] {
+    border-radius: 14px;
+    font-weight: 600;
+    padding: 8px 20px;
+}
+
+/* Giriş Kutuları Köşe Yuvarlama */
+div[data-baseweb="select"] > div,
+div[data-baseweb="input"] > div {
+    border-radius: 14px !important;
+}
+
+/* İlerleme ve İstatistik Metrikleri */
+div[data-testid="stMetric"] {
+    background-color: var(--secondary-background-color);
+    border: 1px solid rgba(128, 128, 128, 0.12);
+    border-radius: 16px;
+    padding: 14px 18px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# Material You Hero Banner
+st.markdown("""
+<div style="background: linear-gradient(135deg, rgba(33, 150, 243, 0.12) 0%, rgba(103, 58, 183, 0.12) 100%); 
+            border: 1px solid rgba(33, 150, 243, 0.22); border-radius: 22px; padding: 24px 28px; margin-bottom: 22px;">
+    <span style="display:inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; 
+                 letter-spacing: 0.6px; text-transform: uppercase; background: rgba(33, 150, 243, 0.18); color: #2196F3; margin-bottom: 8px;">
+        🏢 İNŞAAT MÜHENDİSLİĞİNDE YAPAY ZEKÂ UYGULAMALARI
+    </span>
+    <h1 style="margin: 4px 0 8px 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;">
+        Deprem Sonrası Hasar Tahmin Aracı
+    </h1>
+    <p style="margin: 0; opacity: 0.85; font-size: 0.95rem; line-height: 1.5;">
+        Tablodan öğrenen Random Forest sınıflandırıcısı ve fotoğraftan çatlak tespit eden Roboflow Vision modelini birleştiren karar destek platformu.
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
 try:
     model, meta = model_yukle()
@@ -208,34 +291,53 @@ except Exception as e:
 
 # --- Kenar çubuğu: model bilgisi --------------------------------------
 with st.sidebar:
-    st.header("Model performansı")
+    st.markdown("### 📊 Model Performansı")
     m = meta["metrikler"]
-    st.metric("Test doğruluğu", f"{m['test_dogrulugu']:.3f}")
-    st.metric("5 katlı CV doğruluğu", f"{m['cv_dogrulugu']:.3f}")
-    st.write("Sınıf bazında recall:")
-    st.dataframe(pd.DataFrame({"recall": m["recall"]}).round(2))
-    st.write("Parametreler:", meta["parametreler"])
-    st.header("Çatlak tespiti (Roboflow)")
+    col_m1, col_m2 = st.columns(2)
+    with col_m1:
+        st.metric("Test Doğruluğu", f"{m['test_dogrulugu']:.3f}")
+    with col_m2:
+        st.metric("5-Katlı CV", f"{m['cv_dogrulugu']:.3f}")
+    
+    st.markdown("**Sınıf Bazında Recall (Hassasiyet):**")
+    st.dataframe(pd.DataFrame({"recall": m["recall"]}).round(2), use_container_width=True)
+    st.caption(f"🌲 Parametreler: {meta['parametreler']}")
+    
+    st.markdown("---")
+    st.markdown("### 🔍 Çatlak Tespiti (Roboflow)")
+    
+    # 4 Güçlü Model + Özel Model Giriş Seçeneği
+    model_secenekleri = list(GUCLU_MODELLER.keys()) + ["✨ Özel Model ID Gir (Universe'ten)"]
     model_secim = st.selectbox(
-        "Roboflow Çatlak Modeli",
-        options=list(GUCLU_MODELLER.keys()),
+        "Roboflow Çatlak Modeli Seçin",
+        options=model_secenekleri,
         index=0,
-        help="Labda kullanılan temel modelden farklı olarak eklenen 4 güçlü model seçeneği."
+        help="Hazır 4 güçlü modelden birini seçebilir veya kendi model kimliğinizi yazabilirsiniz."
     )
-    aktif_model_id = GUCLU_MODELLER[model_secim]
-    st.code(aktif_model_id, language="text")
-    guven_esigi_secim = st.slider("Güven eşiği", min_value=0.10, max_value=0.90, value=float(GUVEN_ESIGI), step=0.05)
-    st.write(f"Kural: `{CATLAK_KURALI.__name__}`")
+    
+    if model_secim == "✨ Özel Model ID Gir (Universe'ten)":
+        ozel_id = st.text_input("Özel Model Kimliği (proje/sürüm):", value="wall-crack-detection-l0iit/4",
+                                help="Universe'teki herhangi bir çatlak tespit modelinin proje/sürüm kimliğini girin.")
+        aktif_model_id = ozel_id.strip() if ozel_id.strip() else "wall-crack-detection-l0iit/4"
+        st.info(f"Kullanılan Model: `{aktif_model_id}`")
+    else:
+        aktif_model_id = GUCLU_MODELLER[model_secim]
+        st.code(aktif_model_id, language="text")
+
+    guven_esigi_secim = st.slider("Güven Eşiği (Confidence)", min_value=0.10, max_value=0.90, value=float(GUVEN_ESIGI), step=0.05)
+    st.caption(f"Hesaplama Kuralı: `{CATLAK_KURALI.__name__}` (İnşaat Hasar Ölçeği)")
 
     # API Anahtarı girişi desteği (Secrets yoksa kolaylık sağlar)
     if not api_anahtari():
-        st.warning("ROBOFLOW_API_KEY tanımlı değil.")
+        st.warning("⚠️ ROBOFLOW_API_KEY tanımlı değil.")
         girilen_key = st.text_input("Roboflow API Anahtarı:", type="password", key="rf_key_input",
                                     help="Streamlit Secrets girilmediyse buradan geçici olarak girebilirsiniz.")
         if girilen_key:
             st.session_state["kullanici_api_anahtari"] = girilen_key.strip()
             st.success("API Anahtarı kaydedildi.")
             st.rerun()
+    else:
+        st.success("✅ Roboflow API Anahtarı Hazır")
     try:
         import sklearn
         if sklearn.__version__ != meta.get("sklearn_surumu"):
@@ -291,10 +393,18 @@ with sekme1:
                 if adlar:
                     st.caption("Modelin sınıf adları: " + ", ".join(adlar))
         with b:
-            st.metric("Hesaplanan çatlak yoğunluğu", f"{catl:.2f}")
-            st.markdown(f"### Tahmin edilen hasar sınıfı: "
-                        f"<span style='color:{ETIKET_RENK.get(sinif, '#000')}'>{sinif}</span>",
-                        unsafe_allow_html=True)
+            st.metric("Hesaplanan Çatlak Yoğunluğu", f"{catl:.2f}")
+            renk = ETIKET_RENK.get(sinif, '#2196F3')
+            st.markdown(f"""
+            <div style="background: {renk}18; border: 1.5px solid {renk}; border-radius: 18px; padding: 14px 20px; margin: 12px 0;">
+                <span style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: {renk};">
+                    Tahmin Edilen Hasar Sınıfı
+                </span>
+                <h2 style="margin: 4px 0 0 0; font-size: 1.9rem; font-weight: 800; color: {renk};">
+                    {sinif}
+                </h2>
+            </div>
+            """, unsafe_allow_html=True)
             st.bar_chart(pd.Series(olasilik).reindex(meta["sira"]))
 
 # --- Sekme 2: toplu değerlendirme ------------------------------------
