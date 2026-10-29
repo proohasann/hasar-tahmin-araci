@@ -1,176 +1,170 @@
-# -*- coding: utf-8 -*-
 """
-Hafta 6 Ödevi — Deprem Sonrası Hasar Tahmin Aracı (Material You & Glassmorphism Sürümü)
+Deprem Sonrası Bina Hasar Derecesi Tahmini
+Streamlit Web Uygulaması - Hibrit Karar Destek Sistemi
+Hafta 6 Ödevi - İnşaat Mühendisliğinde Yapay Zekâ Uygulamaları
 
-Fotoğraftaki çatlakları bir Roboflow modeliyle bulur, çatlak yoğunluğunu sizin
-yazdığınız kuralla hesaplar ve eğittiğiniz Random Forest modeliyle bina hasar
-sınıfını tahmin eder.
-
-Tasarım: Google Material You (Material 3) + Glassmorphism (Buzlu Cam) + Koyu/Açık Tema Desteği
+Bu dosya:
+  1. Eğitilmiş Random Forest modelini yükler (models/hasar_modeli.joblib + meta.json).
+  2. Roboflow Universe üzerinden 4 farklı derin öğrenme çatlak modelini ve özel model desteğini sunar.
+  3. Çatlak tespitlerinden inşaat hasar ölçeğine uygun kural tabanlı çatlak yoğunluğu hesaplar.
+  4. Tablo + görsel verilerini birleştirerek hasar sınıfı tahmini üretir.
+  5. Material You ve Glassmorphism tasarım diliyle hem Koyu hem de Açık Modu destekler.
+  6. Tek bina değerlendirmesi ve 10 fotoğraflık ödev veri seti toplu analizi sunar.
 """
+
+from pathlib import Path
 import json
-import os
-
-import cv2
 import joblib
 import numpy as np
 import pandas as pd
+from PIL import Image
 import streamlit as st
 import supervision as sv
-from inference_sdk import InferenceConfiguration, InferenceHTTPClient
-from PIL import Image
+from inference_sdk import InferenceHTTPClient
 
 # ======================================================================
-# 1. ÖĞRENCİNİN DEĞİŞTİRECEĞİ BÖLÜM
+# SABİTLER VE KONFİGÜRASYON
 # ======================================================================
+MODEL_KLASORU = Path(__file__).parent / "models"
+MODEL_DOSYASI = MODEL_KLASORU / "hasar_modeli.joblib"
+META_DOSYASI = MODEL_KLASORU / "meta.json"
 
-# Hocanın verdiği modelden farklı ve daha yüksek başarıma sahip 4 Güçlü Roboflow Modeli:
+# Roboflow Universe 4 Güçlü Çatlak Modeli
 GUCLU_MODELLER = {
-    "1. Wall Crack Detection v4 (Önerilen - Duvar Çatlakları Uzmanı)": "wall-crack-detection-l0iit/4",
-    "2. Surface Crack Detection v3 (Beton ve Yüzey Kılcal Çatlakları)": "surfacecrackdetection/3",
-    "3. Structural Crack Detection v2 (Yapısal Hasar ve Derin Çatlaklar)": "crack-bphdr/2",
-    "4. Vision Crack Detection v1 (Geniş Açılı Çatlak Tespiti)": "crack-ypk4t/1",
+    "1. Wall Crack Detection v4 (Önerilen)": "wall-crack-detection-l0iit/4",
+    "2. Surface Crack Detection v3": "surfacecrackdetection/3",
+    "3. Structural Crack Detection v2": "crack-bphdr/2",
+    "4. Vision Crack Detection v1": "crack-ypk4t/1"
 }
 
-# (a) Birincil/Varsayılan Roboflow Model Kimliği (Hocanın modelinden farklı & güçlü)
-ROBOFLOW_MODEL_ID = "wall-crack-detection-l0iit/4"
+VARSAYILAN_ROBOFLOW_MODEL_ID = "wall-crack-detection-l0iit/4"
+GUVEN_ESIGI = 0.25
 
-# (b) Güven eşiği: bu değerin altındaki kutular çatlak sayılmaz (0-1 arası)
-GUVEN_ESIGI = 0.30
+ETIKET_RENK = {
+    "Hasarsız": "#10B981",       # Yeşil
+    "Hafif": "#3B82F6",          # Mavi
+    "Orta": "#F59E0B",           # Sarı/Turuncu
+    "Ağır": "#EF4444",           # Kırmızı
+    "Yıkık": "#7F1D1D",          # Koyu Kırmızı
+}
 
-
-# (c) Çatlak yoğunluğu kuralı.
-def kural_kutu_sayisi(detections, yukseklik, genislik):
-    """Başlangıç örneği: kutu sayısı / 10 (en çok 1)."""
-    return min(len(detections) / 10, 1.0)
-
-
-def kural_alan_orani(detections, yukseklik, genislik):
-    """Başlangıç örneği: kutu alanları toplamının fotoğraf alanına oranı x 3."""
-    if len(detections) == 0:
-        return 0.0
-    x1, y1, x2, y2 = detections.xyxy.T
-    alan = ((x2 - x1) * (y2 - y1)).sum()
-    return min(3 * alan / (yukseklik * genislik), 1.0)
-
-
-def kural_ogrenci(detections, yukseklik, genislik):
-    """
-    İnşaat Mühendisliği Hasar Yoğunluğu Kuralı:
-    Eğitim verisindeki dağılımla uyumlu:
-      Hasarsız ~0.25 | Hafif ~0.39 | Orta ~0.57 | Ağır ~0.73 | Yıkık ~0.88
-    
-    1. Taban Değer (0.18): Çatlak bulunmayan temiz duvarda Hasarsız bandında kalmayı sağlar.
-    2. Güven Ağırlıklı Kutu Alan Oranı: Hasarın duvardaki fiziksel yayılım yüzdesini ölçer.
-    3. Çatlak Sayısı & Ortalama Güven Bileşeni: Çatlakların sıklığını ve modelin kesinliğini hesaba katar.
-    """
-    if len(detections) == 0:
-        return 0.18
-
-    x1, y1, x2, y2 = detections.xyxy.T
-    kutu_alanlari = (x2 - x1) * (y2 - y1)
-    toplam_alan = float(yukseklik * genislik)
-
-    conf = (detections.confidence if hasattr(detections, "confidence") and detections.confidence is not None 
-            else np.ones(len(detections)))
-    
-    # Güven ağırlıklı çatlak alan oranı
-    agirlikli_alan = float((kutu_alanlari * conf).sum() / (toplam_alan + 1e-6))
-    alan_bileseni = min(agirlikli_alan / 0.50, 1.0)
-
-    # Kutu sayısı ve model güven bileşeni
-    ort_guven = float(np.mean(conf)) if len(conf) > 0 else 0.5
-    kutu_bileseni = min(len(detections) / 8.0, 1.0) * ort_guven
-
-    skor = 0.18 + 0.44 * alan_bileseni + 0.30 * kutu_bileseni
-    return float(np.clip(skor, 0.05, 0.98))
-
-
-# Aktif kural olarak öğrenci kuralını belirliyoruz
-CATLAK_KURALI = kural_ogrenci
 
 # ======================================================================
-# 2. SABİT BÖLÜM
+# 1. MODEL YÜKLEME VE TAHMİN FONKSİYONLARI
 # ======================================================================
-MODEL_YOLU = "models/hasar_modeli.joblib"
-META_YOLU = "models/meta.json"
-ETIKET_RENK = {"Hasarsız": "#10B981", "Hafif": "#F59E0B", "Orta": "#F97316",
-               "Ağır": "#EF4444", "Yıkık": "#8B5CF6"}
-
-
 @st.cache_resource
 def model_yukle():
-    model = joblib.load(MODEL_YOLU)
-    with open(META_YOLU, encoding="utf-8") as f:
+    """Disk üzerindeki Random Forest modelini ve meta verilerini yükler."""
+    if not MODEL_DOSYASI.exists() or not META_DOSYASI.exists():
+        raise FileNotFoundError(
+            f"Model dosyaları bulunamadı: {MODEL_DOSYASI} veya {META_DOSYASI}\n"
+            "Lütfen önce 'train_hasar_modeli.py' betiğini çalıştırın."
+        )
+    model = joblib.load(MODEL_DOSYASI)
+    with open(META_DOSYASI, "r", encoding="utf-8") as f:
         meta = json.load(f)
     return model, meta
 
 
 def api_anahtari():
-    try:
-        if "ROBOFLOW_API_KEY" in st.secrets:
-            return st.secrets["ROBOFLOW_API_KEY"]
-    except Exception:
-        pass
-    if os.environ.get("ROBOFLOW_API_KEY"):
-        return os.environ.get("ROBOFLOW_API_KEY")
-    return st.session_state.get("kullanici_api_anahtari", "")
+    """Streamlit Secrets veya session_state üzerinden Roboflow API anahtarını alır."""
+    if "ROBOFLOW_API_KEY" in st.secrets:
+        return st.secrets["ROBOFLOW_API_KEY"]
+    if "kullanici_api_anahtari" in st.session_state and st.session_state["kullanici_api_anahtari"]:
+        return st.session_state["kullanici_api_anahtari"]
+    return None
 
 
-def tespit_et(image_bgr, model_id=None, guven_esigi=None):
-    """Fotoğrafı Roboflow'a gönderir; güven eşiğini aşan kutuları döndürür."""
-    m_id = model_id or ROBOFLOW_MODEL_ID
-    g_esik = guven_esigi if guven_esigi is not None else GUVEN_ESIGI
-    anahtar = api_anahtari()
-    if not anahtar:
-        raise RuntimeError("ROBOFLOW_API_KEY bulunamadı. Streamlit 'Secrets' bölümüne ekleyin veya kenar çubuğundan girin.")
-    client = InferenceHTTPClient(api_url="https://serverless.roboflow.com", api_key=anahtar)
-    sorgu = InferenceConfiguration(confidence_threshold=g_esik, api_key_transport="header")
-    with client.use_configuration(sorgu):
-        sonuc = client.infer(image_bgr, model_id=m_id)
+@st.cache_resource
+def roboflow_istemcisi(api_key: str):
+    """Roboflow inference istemcisini önbelleğe alarak oluşturur."""
+    return InferenceHTTPClient(
+        api_url="https://detect.roboflow.com",
+        api_key=api_key,
+    )
+
+
+def goruntu_yukle(yuklenen_dosya):
+    """Kullanıcının yüklediği dosyayı RGB PIL formatına dönüştürür."""
+    img = Image.open(yuklenen_dosya)
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    return img
+
+
+def tespit_et(img: Image.Image, model_id: str = VARSAYILAN_ROBOFLOW_MODEL_ID, guven_esigi: float = GUVEN_ESIGI):
+    """Görüntüyü seçilen Roboflow modeline gönderir ve supervision Detections döner."""
+    key = api_anahtari()
+    if not key:
+        raise ValueError("Roboflow API anahtarı bulunamadı! Lütfen Secrets veya kenar çubuğundan girin.")
+
+    client = roboflow_istemcisi(key)
+    img_np = np.array(img)
+    sonuc = client.infer(img_np, model_id=model_id)
     det = sv.Detections.from_inference(sonuc)
-    return det[det.confidence >= g_esik]
+    if len(det) > 0 and guven_esigi > 0:
+        det = det[det.confidence >= guven_esigi]
+    return det
 
 
-def goruntu_yukle(dosya):
-    """Yüklenen dosyayı BGR numpy dizisine çevirir (Hafta 6 lab ile aynı biçim)."""
-    img = Image.open(dosya).convert("RGB")
-    return np.array(img)[:, :, ::-1].copy()
+def kutulari_ciz(img: Image.Image, det: sv.Detections) -> Image.Image:
+    """Görüntü üzerine tespit edilen çatlak kutularını ve güven skorlarını çizer."""
+    img_np = np.array(img).copy()
+    if len(det) == 0:
+        return Image.fromarray(img_np)
+
+    box_annotator = sv.BoxAnnotator(thickness=3, color=sv.Color(r=239, g=68, b=68))
+    label_annotator = sv.LabelAnnotator(text_scale=0.6, text_thickness=1)
+
+    labels = [f"Çatlak: {conf:.2f}" for conf in det.confidence]
+    annotated = box_annotator.annotate(scene=img_np, detections=det)
+    annotated = label_annotator.annotate(scene=annotated, detections=det, labels=labels)
+    return Image.fromarray(annotated)
 
 
-def catlak_yogunlugu_hesapla(det, image_bgr):
-    h, w = image_bgr.shape[:2]
-    return float(np.clip(CATLAK_KURALI(det, h, w), 0.0, 1.0))
+# ======================================================================
+# 2. ÖZEL ÇATLAK YOĞUNLUĞU KURALI (İNŞAAT HASAR ÖLÇEĞİ KALİBRASYONU)
+# ======================================================================
+def kural_ogrenci(det: sv.Detections, img: Image.Image) -> float:
+    """
+    Eğitim verisi dağılımıyla tam kalibreli hibrit çatlak yoğunluğu kuralı:
+      - Hasarsız bina bazal değeri: 0.18
+      - Alan bileşeni: Toplam çatlak alanı / Görüntü alanı (ağırlık: 0.44)
+      - Adet ve güven bileşeni: min(kutu / 8, 1.0) * ortalama_güven (ağırlık: 0.30)
+    Çıktı aralığı: [0.18 - 1.00]
+    """
+    if len(det) == 0:
+        return 0.18
+
+    W, H = img.size
+    toplam_piksel = float(W * H)
+    alanlar = [(x2 - x1) * (y2 - y1) for x1, y1, x2, y2 in det.xyxy]
+    agirlikli_alan = float(np.sum(np.array(alanlar) * det.confidence)) / toplam_piksel
+
+    alan_skoru = min(agirlikli_alan / 0.50, 1.0)
+    adet_skoru = min(len(det) / 8.0, 1.0)
+    guven_skoru = float(np.mean(det.confidence))
+
+    skor = 0.18 + (0.44 * alan_skoru) + (0.30 * adet_skoru * guven_skoru)
+    return float(np.clip(skor, 0.0, 1.0))
 
 
-def kutulari_ciz(image_bgr, det):
-    kutu, etiket = sv.BoxAnnotator(), sv.LabelAnnotator()
-    out = kutu.annotate(scene=image_bgr.copy(), detections=det)
-    out = etiket.annotate(scene=out, detections=det)
-    return out[:, :, ::-1]   # RGB, st.image için
+CATLAK_KURALI = kural_ogrenci
 
 
-def bina_satiri(meta, bilgi, catl):
-    """Form değerlerinden modelin beklediği tek satırlık tabloyu üretir."""
-    satir = {c: 0.0 for c in meta["ozellikler"]}
-    for k in ["kat_sayisi", "insaat_yili", "pga_g", "deformasyon_yuzde",
-              "doseme_hasari", "kolon_hasari"]:
-        satir[k] = float(bilgi[k])
-    satir["catl_yogunluk"] = float(catl)
-    satir["yonetmelik_oncesi"] = int(float(bilgi["insaat_yili"]) < 1999)
-    for onek, deger in (("yapi_turu_", bilgi["yapi_turu"]), ("deprem_bolgesi_", bilgi["deprem_bolgesi"])):
-        if onek + str(deger) in satir:
-            satir[onek + str(deger)] = 1.0
-    return pd.DataFrame([satir])[meta["ozellikler"]]
+def catlak_yogunlugu_hesapla(det: sv.Detections, img: Image.Image) -> float:
+    return float(CATLAK_KURALI(det, img))
 
 
-def tahmin_et(model, meta, bilgi, catl):
-    p = model.predict_proba(bina_satiri(meta, bilgi, catl))[0]
-    olasilik = {meta["sira"][int(c)]: float(v) for c, v in zip(model.classes_, p)}
-    for s in meta["sira"]:
-        olasilik.setdefault(s, 0.0)
-    sinif = max(olasilik, key=olasilik.get)
-    return sinif, olasilik
+def tahmin_et(model, meta, tablo_bilgisi: dict, catlak_yogunlugu: float):
+    """Girdi parametrelerini birleştirerek hasar sınıfını ve olasılıkları hesaplar."""
+    satir = dict(tablo_bilgisi)
+    satir["catlak_yogunlugu"] = catlak_yogunlugu
+    X = pd.DataFrame([satir])[meta["ozellik_adlari"]]
+    sinif = model.predict(X)[0]
+    proba = model.predict_proba(X)[0]
+    olasiliklar = dict(zip(model.classes_, proba))
+    return sinif, olasiliklar
 
 
 def aralik_uyarilari(meta, bilgi):
@@ -192,85 +186,167 @@ st.set_page_config(page_title="Hasar Tahmin Aracı", page_icon="🏢", layout="w
 if "koyu_tema" not in st.session_state:
     st.session_state.koyu_tema = True
 
-# Tema Renk Değişkenleri
+# Tema Renk Tanımlamaları (Her iki modda yüksek kontrast ve net okunabilirlik)
 if st.session_state.koyu_tema:
     tema_ad = "Koyu Mod 🌙"
+    color_scheme = "dark"
+    app_bg_plain = "#0F172A"
+    secondary_bg = "#1E293B"
     bg_style = "background: radial-gradient(circle at 20% 20%, #1e1b4b 0%, #0f172a 45%, #020617 100%) fixed;"
     text_color = "#F8FAFC"
     subtext_color = "#94A3B8"
-    glass_bg = "rgba(30, 41, 59, 0.60)"
+    glass_bg = "rgba(30, 41, 59, 0.70)"
     glass_border = "rgba(255, 255, 255, 0.12)"
     glass_shadow = "0 8px 32px 0 rgba(0, 0, 0, 0.45)"
-    sidebar_bg = "rgba(15, 23, 42, 0.75)"
-    input_bg = "rgba(15, 23, 42, 0.65)"
-    metric_bg = "rgba(255, 255, 255, 0.05)"
-    accent_gradient = "linear-gradient(135deg, #38BDF8 0%, #818CF8 100%)"
-    hero_bg = "linear-gradient(135deg, rgba(56, 189, 248, 0.12) 0%, rgba(129, 140, 248, 0.14) 100%)"
+    sidebar_bg = "rgba(15, 23, 42, 0.92)"
+    input_bg = "rgba(30, 41, 59, 0.85)"
+    input_text = "#F8FAFC"
+    metric_bg = "rgba(30, 41, 59, 0.65)"
+    metric_val_color = "#38BDF8"
+    stepper_bg = "rgba(51, 65, 85, 0.8)"
+    stepper_hover = "#475569"
+    accent_gradient = "linear-gradient(135deg, #0284C7 0%, #6366F1 100%)"
+    hero_bg = "linear-gradient(135deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.85) 100%)"
+    hero_title = "#F8FAFC"
+    hero_sub = "#CBD5E1"
+    hero_badge_bg = "rgba(99, 102, 241, 0.22)"
+    hero_badge_text = "#A5B4FC"
+    hero_badge_border = "rgba(99, 102, 241, 0.4)"
+    btn_sec_bg = "rgba(51, 65, 85, 0.8)"
+    btn_sec_text = "#F8FAFC"
 else:
     tema_ad = "Açık Mod ☀️"
-    bg_style = "background: radial-gradient(circle at 20% 20%, #E0E7FF 0%, #F1F5F9 50%, #F8FAFC 100%) fixed;"
-    text_color = "#0F172A"
-    subtext_color = "#475569"
-    glass_bg = "rgba(255, 255, 255, 0.75)"
-    glass_border = "rgba(255, 255, 255, 0.85)"
-    glass_shadow = "0 8px 32px 0 rgba(31, 38, 135, 0.08)"
-    sidebar_bg = "rgba(255, 255, 255, 0.82)"
-    input_bg = "rgba(255, 255, 255, 0.90)"
-    metric_bg = "rgba(0, 0, 0, 0.03)"
+    color_scheme = "light"
+    app_bg_plain = "#F8FAFC"
+    secondary_bg = "#FFFFFF"
+    bg_style = "background: radial-gradient(circle at 15% 15%, #F1F5F9 0%, #F8FAFC 45%, #FFFFFF 100%) fixed;"
+    text_color = "#0F172A"          # Derin gece laciverti/siyah, %100 kristal netlikte
+    subtext_color = "#334155"       # Koyu antrasit gri, net okunur
+    glass_bg = "rgba(255, 255, 255, 0.94)"
+    glass_border = "#CBD5E1"        # Belirgin zarif kenarlık
+    glass_shadow = "0 4px 20px 0 rgba(15, 23, 42, 0.08)"
+    sidebar_bg = "#F8FAFC"          # Ferah açık zemin
+    input_bg = "#FFFFFF"            # Bembeyaz input zemini
+    input_text = "#0F172A"          # Input içi koyu siyah metin
+    metric_bg = "#FFFFFF"           # Bembeyaz metrik kartı
+    metric_val_color = "#0F172A"    # Güçlü koyu lacivert sayı
+    stepper_bg = "#E2E8F0"          # + / - butonları için açık gri zemin
+    stepper_hover = "#CBD5E1"
     accent_gradient = "linear-gradient(135deg, #0284C7 0%, #4F46E5 100%)"
-    hero_bg = "linear-gradient(135deg, rgba(2, 132, 199, 0.08) 0%, rgba(79, 70, 229, 0.09) 100%)"
+    hero_bg = "linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 50%, #F8FAFC 100%)"
+    hero_title = "#1E1B4B"          # Derin lacivert başlık
+    hero_sub = "#334155"
+    hero_badge_bg = "rgba(79, 70, 229, 0.12)"
+    hero_badge_text = "#4338CA"
+    hero_badge_border = "rgba(79, 70, 229, 0.3)"
+    btn_sec_bg = "#F1F5F9"
+    btn_sec_text = "#0F172A"
 
-# Özel CSS Enjeksiyonu
+# Kapsamlı ve Güçlü Özel CSS Enjeksiyonu
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
-html, body, [class*="css"], .stApp {{
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif !important;
+/* 1. Streamlit Değişkenlerini Zorla Güncelle */
+:root {{
+    color-scheme: {color_scheme} !important;
+    --text-color: {text_color} !important;
+    --background-color: {app_bg_plain} !important;
+    --secondary-background-color: {secondary_bg} !important;
+    --primary-color: #4F46E5 !important;
 }}
 
-.stApp {{
+/* 2. Temel Tipografi ve Arka Plan */
+html, body, .stApp {{
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
     {bg_style}
     color: {text_color} !important;
 }}
 
-/* Buzlu Cam Kenar Çubuğu (Glassmorphism Sidebar) */
+/* 3. Tüm Başlıklar ve Genel Metinler */
+h1, h2, h3, h4, h5, h6,
+.stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
+[data-testid="stMarkdownContainer"] h1, [data-testid="stMarkdownContainer"] h2, [data-testid="stMarkdownContainer"] h3,
+[data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] span, [data-testid="stMarkdownContainer"] strong,
+[data-testid="stMarkdownContainer"] li,
+.stCaption, [data-testid="stCaptionContainer"] p, [data-testid="stCaptionContainer"] span {{
+    color: {text_color} !important;
+}}
+
+/* 4. Kenar Çubuğu (Sidebar) */
 [data-testid="stSidebar"] {{
+    background-color: {sidebar_bg} !important;
     background: {sidebar_bg} !important;
-    backdrop-filter: blur(18px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(18px) saturate(180%) !important;
-    border-right: 1px solid {glass_border} !important;
+    border-right: 1.5px solid {glass_border} !important;
     box-shadow: {glass_shadow} !important;
 }}
-
-/* Material You / Glassmorphism Kart Sınıfları */
-.m3-glass-card {{
-    background: {glass_bg};
-    backdrop-filter: blur(16px) saturate(170%);
-    -webkit-backdrop-filter: blur(16px) saturate(170%);
-    border: 1px solid {glass_border};
-    border-radius: 20px;
-    padding: 24px;
-    margin-bottom: 22px;
-    box-shadow: {glass_shadow};
-    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+[data-testid="stSidebar"] * {{
+    color: {text_color};
 }}
-.m3-glass-card:hover {{
-    transform: translateY(-2px);
-    box-shadow: 0 12px 36px 0 rgba(0, 0, 0, 0.18);
-    border-color: rgba(99, 102, 241, 0.4);
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] span,
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h1,
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h2,
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h3,
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] strong,
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] label,
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] span,
+[data-testid="stSidebar"] .stCaption p,
+[data-testid="stSidebar"] .stCaption span,
+[data-testid="stSidebar"] small {{
+    color: {text_color} !important;
 }}
 
-/* Form Input ve Select Alanları */
+/* 5. Metrik Kartları (Sidebar) */
+div[data-testid="stMetric"] {{
+    background: {metric_bg} !important;
+    border: 1.5px solid {glass_border} !important;
+    border-radius: 16px !important;
+    padding: 14px 18px !important;
+    box-shadow: {glass_shadow} !important;
+}}
+[data-testid="stMetricLabel"],
+[data-testid="stMetricLabel"] *,
+div[data-testid="stMetric"] label {{
+    color: {subtext_color} !important;
+    font-weight: 700 !important;
+    font-size: 0.88rem !important;
+}}
+[data-testid="stMetricValue"],
+[data-testid="stMetricValue"] *,
+div[data-testid="stMetric"] div {{
+    color: {metric_val_color} !important;
+    font-weight: 800 !important;
+    font-size: 1.95rem !important;
+}}
+
+/* 6. Form Alanı Etiketleri (Labels) */
+label,
+.stWidgetLabel,
+[data-testid="stWidgetLabel"],
+[data-testid="stWidgetLabel"] label,
+[data-testid="stWidgetLabel"] p,
+[data-testid="stWidgetLabel"] span {{
+    color: {text_color} !important;
+    font-weight: 700 !important;
+    font-size: 0.92rem !important;
+}}
+
+/* 7. Input Kutuları, Selectbox ve Sayı Girişleri */
 div[data-baseweb="select"] > div,
 div[data-baseweb="input"] > div,
 div[data-baseweb="base-input"] {{
     background-color: {input_bg} !important;
-    border-radius: 14px !important;
-    border: 1px solid {glass_border} !important;
-    color: {text_color} !important;
-    backdrop-filter: blur(10px) !important;
-    transition: all 0.2s ease !important;
+    border-radius: 12px !important;
+    border: 1.5px solid {glass_border} !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+}}
+div[data-baseweb="select"] *,
+div[data-baseweb="input"] *,
+input, textarea, select {{
+    color: {input_text} !important;
+    background-color: transparent !important;
 }}
 div[data-baseweb="select"] > div:hover,
 div[data-baseweb="input"] > div:focus-within {{
@@ -278,83 +354,164 @@ div[data-baseweb="input"] > div:focus-within {{
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
 }}
 
-/* Dosya Yükleyici (File Uploader) Glass Tasarımı */
+/* Sayı Arttırma / Azaltma (+ ve -) Butonları */
+div[data-baseweb="input"] button {{
+    background-color: {stepper_bg} !important;
+    border-radius: 8px !important;
+    border: none !important;
+}}
+div[data-baseweb="input"] button:hover {{
+    background-color: {stepper_hover} !important;
+}}
+div[data-baseweb="input"] button svg {{
+    fill: {input_text} !important;
+    color: {input_text} !important;
+}}
+
+/* 8. Radio Butonlar */
+div[data-testid="stRadio"] label,
+div[data-testid="stRadio"] label *,
+div[data-testid="stRadio"] span,
+div[data-testid="stRadio"] p {{
+    color: {text_color} !important;
+    font-weight: 600 !important;
+}}
+
+/* 9. Dosya Yükleyici (File Uploader) */
 [data-testid="stFileUploader"] {{
     background: {glass_bg} !important;
-    backdrop-filter: blur(14px) !important;
     border: 2px dashed {glass_border} !important;
-    border-radius: 20px !important;
+    border-radius: 18px !important;
     padding: 16px !important;
-    transition: all 0.25s ease !important;
 }}
-[data-testid="stFileUploader"]:hover {{
-    border-color: #6366F1 !important;
-    background: rgba(99, 102, 241, 0.06) !important;
+[data-testid="stFileUploaderDropzone"],
+[data-testid="stFileUploader"] section {{
+    background-color: {input_bg} !important;
+    border: 1px dashed {glass_border} !important;
+    border-radius: 14px !important;
 }}
-
-/* Material You Yuvarlak Butonlar */
-.stButton > button {{
-    background: {accent_gradient} !important;
-    color: white !important;
-    border-radius: 9999px !important;
-    padding: 10px 30px !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.4px !important;
-    border: none !important;
-    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35) !important;
-    transition: all 0.2s ease !important;
+[data-testid="stFileUploader"] *,
+[data-testid="stFileUploaderDropzone"] *,
+[data-testid="stFileUploader"] section * {{
+    color: {text_color} !important;
 }}
-.stButton > button:hover {{
-    transform: translateY(-2px) scale(1.01) !important;
-    box-shadow: 0 8px 25px rgba(99, 102, 241, 0.5) !important;
-}}
-
-/* Metrik Kartları */
-div[data-testid="stMetric"] {{
-    background: {metric_bg} !important;
-    backdrop-filter: blur(12px) !important;
+[data-testid="stFileUploader"] button {{
+    background: {btn_sec_bg} !important;
+    color: {btn_sec_text} !important;
     border: 1px solid {glass_border} !important;
-    border-radius: 16px !important;
-    padding: 12px 18px !important;
-    box-shadow: {glass_shadow} !important;
+    border-radius: 10px !important;
 }}
 
-/* Sekmeler (Material 3 Segmented Control) */
+/* 10. Sekmeler (Tabs - Material 3 Segmented Control) */
 .stTabs [data-baseweb="tab-list"] {{
     gap: 8px;
-    background: {glass_bg};
-    backdrop-filter: blur(14px);
+    background: {glass_bg} !important;
     padding: 6px;
-    border-radius: 18px;
-    border: 1px solid {glass_border};
+    border-radius: 16px;
+    border: 1.5px solid {glass_border};
 }}
 .stTabs [data-baseweb="tab"] {{
-    border-radius: 14px;
-    font-weight: 700;
-    color: {subtext_color};
+    border-radius: 12px;
     padding: 8px 20px;
+    background-color: transparent !important;
+    border: none !important;
+}}
+.stTabs [data-baseweb="tab"] *,
+.stTabs [data-baseweb="tab"] p,
+.stTabs [data-baseweb="tab"] span {{
+    color: {subtext_color} !important;
+    font-weight: 600 !important;
 }}
 .stTabs [aria-selected="true"] {{
     background: {accent_gradient} !important;
-    color: white !important;
-    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35) !important;
+}}
+.stTabs [aria-selected="true"] *,
+.stTabs [aria-selected="true"] p,
+.stTabs [aria-selected="true"] span {{
+    color: #FFFFFF !important;
+    font-weight: 800 !important;
+}}
+
+/* 11. Yuvarlak Material You Butonlar */
+.stButton > button {{
+    background: {accent_gradient} !important;
+    color: #FFFFFF !important;
+    border-radius: 9999px !important;
+    padding: 10px 28px !important;
+    font-weight: 700 !important;
+    border: none !important;
+    box-shadow: 0 4px 14px rgba(79, 70, 229, 0.3) !important;
+    transition: all 0.2s ease !important;
+}}
+.stButton > button:hover {{
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 22px rgba(79, 70, 229, 0.45) !important;
+    color: #FFFFFF !important;
+}}
+.stButton > button * {{
+    color: #FFFFFF !important;
+}}
+
+/* 12. Kart Kapsayıcıları (Border Wrapper) */
+[data-testid="stVerticalBlockBorderWrapper"] {{
+    background: {glass_bg} !important;
+    border: 1.5px solid {glass_border} !important;
+    border-radius: 18px !important;
+    box-shadow: {glass_shadow} !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    padding: 18px !important;
+    margin-bottom: 16px !important;
+}}
+.m3-glass-card {{
+    background: {glass_bg} !important;
+    border: 1.5px solid {glass_border} !important;
+    border-radius: 18px !important;
+    padding: 22px !important;
+    box-shadow: {glass_shadow} !important;
+}}
+
+/* 13. Dataframe ve Tablolar */
+[data-testid="stDataFrame"],
+div[data-testid="stTable"] {{
+    background-color: {input_bg} !important;
+    border-radius: 14px !important;
+    border: 1.5px solid {glass_border} !important;
+}}
+[data-testid="stDataFrame"] * {{
+    color: {text_color} !important;
+}}
+
+/* 14. Kod Kutusu (st.code) ve Slider */
+[data-testid="stCode"] {{
+    background-color: {input_bg} !important;
+    border: 1.5px solid {glass_border} !important;
+    border-radius: 12px !important;
+}}
+[data-testid="stCode"] * {{
+    color: {text_color} !important;
+}}
+div[data-testid="stSlider"] * {{
+    color: {text_color} !important;
 }}
 </style>
 """, unsafe_allow_html=True)
 
 # Üst Başlık (Hero Glass Banner)
 st.markdown(f"""
-<div class="m3-glass-card" style="background: {hero_bg}; padding: 26px 30px; margin-bottom: 24px;">
+<div class="m3-glass-card" style="background: {hero_bg}; border: 1.5px solid {hero_badge_border}; padding: 26px 30px; margin-bottom: 22px;">
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
         <div>
-            <span style="display:inline-block; padding: 4px 14px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; 
-                         letter-spacing: 0.6px; text-transform: uppercase; background: rgba(99, 102, 241, 0.22); color: #818CF8; margin-bottom: 8px;">
+            <span style="display:inline-block; padding: 4px 14px; border-radius: 9999px; font-size: 0.78rem; font-weight: 700; 
+                         letter-spacing: 0.6px; text-transform: uppercase; background: {hero_badge_bg}; color: {hero_badge_text}; 
+                         border: 1px solid {hero_badge_border}; margin-bottom: 8px;">
                 🏢 İNŞAAT MÜHENDİSLİĞİNDE YAPAY ZEKÂ UYGULAMALARI
             </span>
-            <h1 style="margin: 4px 0 8px 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;">
+            <h1 style="margin: 4px 0 8px 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px; color: {hero_title} !important;">
                 Deprem Sonrası Hasar Tahmin Aracı
             </h1>
-            <p style="margin: 0; opacity: 0.85; font-size: 0.95rem; max-width: 800px; line-height: 1.5;">
+            <p style="margin: 0; font-size: 0.96rem; max-width: 850px; line-height: 1.5; color: {hero_sub} !important;">
                 Tablodan öğrenen Random Forest sınıflandırıcısı ve fotoğraftan çatlak tespit eden Roboflow derin öğrenme modelini birleştiren hibrit karar destek sistemi.
             </p>
         </div>
@@ -449,39 +606,33 @@ sekme1, sekme2 = st.tabs(["🏛️ Tek Bina Değerlendirme", "📑 Toplu Değerl
 with sekme1:
     sol, sag = st.columns(2, gap="medium")
     with sol:
-        st.markdown("""
-        <div class="m3-glass-card">
-            <h3 style="margin-top:0;">📋 Yapısal Bina Parametreleri</h3>
-        """, unsafe_allow_html=True)
-        yapi = st.selectbox("Yapı türü", meta["yapi_turleri"], index=meta["yapi_turleri"].index("Betonarme")
-                            if "Betonarme" in meta["yapi_turleri"] else 0)
-        c_k1, c_k2 = st.columns(2)
-        with c_k1:
-            kat = st.number_input("Kat sayısı", min_value=1, max_value=60, value=5, step=1)
-        with c_k2:
-            yil = st.number_input("İnşaat yılı", min_value=1800, max_value=2030, value=1995, step=1)
-        bolge = st.selectbox("Deprem bölgesi", meta["deprem_bolgeleri"])
-        c_p1, c_p2 = st.columns(2)
-        with c_p1:
-            pga = st.number_input("Beklenen PGA (g)", min_value=0.0, max_value=2.0, value=0.30, step=0.01)
-        with c_p2:
-            defo = st.number_input("Deformasyon (%)", min_value=0.0, max_value=100.0, value=1.0, step=0.1)
-        c_d1, c_d2 = st.columns(2)
-        with c_d1:
-            dos = st.radio("Döşeme hasarı", [0, 1], format_func=lambda v: "Var" if v else "Yok", horizontal=True)
-        with c_d2:
-            kol = st.radio("Kolon hasarı", [0, 1], format_func=lambda v: "Var" if v else "Yok", horizontal=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("### 📋 Yapısal Bina Parametreleri")
+            yapi = st.selectbox("Yapı türü", meta["yapi_turleri"], index=meta["yapi_turleri"].index("Betonarme")
+                                if "Betonarme" in meta["yapi_turleri"] else 0)
+            c_k1, c_k2 = st.columns(2)
+            with c_k1:
+                kat = st.number_input("Kat sayısı", min_value=1, max_value=60, value=5, step=1)
+            with c_k2:
+                yil = st.number_input("İnşaat yılı", min_value=1800, max_value=2030, value=1995, step=1)
+            bolge = st.selectbox("Deprem bölgesi", meta["deprem_bolgeleri"])
+            c_p1, c_p2 = st.columns(2)
+            with c_p1:
+                pga = st.number_input("Beklenen PGA (g)", min_value=0.0, max_value=2.0, value=0.30, step=0.01)
+            with c_p2:
+                defo = st.number_input("Deformasyon (%)", min_value=0.0, max_value=100.0, value=1.0, step=0.1)
+            c_d1, c_d2 = st.columns(2)
+            with c_d1:
+                dos = st.radio("Döşeme hasarı", [0, 1], format_func=lambda v: "Var" if v else "Yok", horizontal=True)
+            with c_d2:
+                kol = st.radio("Kolon hasarı", [0, 1], format_func=lambda v: "Var" if v else "Yok", horizontal=True)
 
     with sag:
-        st.markdown("""
-        <div class="m3-glass-card">
-            <h3 style="margin-top:0;">📸 Duvar Hasar Fotoğrafı</h3>
-        """, unsafe_allow_html=True)
-        foto = st.file_uploader("Duvar çatlak fotoğrafı yükleyin", type=["jpg", "jpeg", "png"], key="tek")
-        if foto is not None:
-            st.image(foto, caption="Yüklenen Fotoğraf", use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("### 📸 Duvar Hasar Fotoğrafı")
+            foto = st.file_uploader("Duvar çatlak fotoğrafı yükleyin", type=["jpg", "jpeg", "png"], key="tek")
+            if foto is not None:
+                st.image(foto, caption="Yüklenen Fotoğraf", use_container_width=True)
 
     bilgi = {"yapi_turu": yapi, "kat_sayisi": kat, "insaat_yili": yil, "deprem_bolgesi": bolge,
              "pga_g": pga, "deformasyon_yuzde": defo, "doseme_hasari": dos, "kolon_hasari": kol}
@@ -499,59 +650,55 @@ with sekme1:
                 st.stop()
             sinif, olasilik = tahmin_et(model, meta, bilgi, catl)
             
-            st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
+            st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
             res_sol, res_sag = st.columns(2, gap="medium")
             with res_sol:
-                st.markdown("""<div class="m3-glass-card">
-                    <h3 style="margin-top:0;">🎯 Tespit Edilen Çatlaklar</h3>
-                """, unsafe_allow_html=True)
-                st.image(kutulari_ciz(img, det), caption=f"{len(det)} adet çatlak kutusu tespit edildi",
-                         use_container_width=True)
-                if len(det):
-                    adlar = sorted(set(det.data.get("class_name", [])))
-                    if adlar:
-                        st.caption("Model sınıf adları: " + ", ".join(adlar))
-                st.markdown("</div>", unsafe_allow_html=True)
+                with st.container(border=True):
+                    st.markdown("### 🎯 Tespit Edilen Çatlaklar")
+                    st.image(kutulari_ciz(img, det), caption=f"{len(det)} adet çatlak kutusu tespit edildi",
+                             use_container_width=True)
+                    if len(det):
+                        adlar = sorted(set(det.data.get("class_name", [])))
+                        if adlar:
+                            st.caption("Model sınıf adları: " + ", ".join(adlar))
 
             with res_sag:
                 renk = ETIKET_RENK.get(sinif, '#38BDF8')
-                st.markdown(f"""
-                <div class="m3-glass-card" style="border-left: 6px solid {renk};">
-                    <span style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: {renk};">
-                        Tahmin Edilen Hasar Sınıfı
-                    </span>
-                    <h2 style="margin: 4px 0 12px 0; font-size: 2.3rem; font-weight: 800; color: {renk};">
-                        {sinif}
-                    </h2>
-                    <p style="margin: 0; opacity: 0.85; font-size: 0.95rem;">
-                        Hesaplanan Çatlak Yoğunluğu: <b>{catl:.2f}</b> (Ölçek: 0 - 1)
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
+                with st.container(border=True):
+                    st.markdown(f"""
+                    <div style="border-left: 6px solid {renk}; padding-left: 16px; margin-bottom: 12px;">
+                        <span style="font-size: 0.82rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: {renk};">
+                            Tahmin Edilen Hasar Sınıfı
+                        </span>
+                        <h2 style="margin: 4px 0 8px 0; font-size: 2.4rem; font-weight: 800; color: {renk};">
+                            {sinif}
+                        </h2>
+                        <p style="margin: 0; font-size: 0.98rem;">
+                            Hesaplanan Çatlak Yoğunluğu: <b>{catl:.2f}</b> (Ölçek: 0 - 1)
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
                 
-                st.markdown("""<div class="m3-glass-card">
-                    <h4 style="margin-top:0;">📊 Sınıf Olasılık Dağılımı</h4>
-                """, unsafe_allow_html=True)
-                st.bar_chart(pd.Series(olasilik).reindex(meta["sira"]))
-                st.markdown("</div>", unsafe_allow_html=True)
+                with st.container(border=True):
+                    st.markdown("#### 📊 Sınıf Olasılık Dağılımı")
+                    st.bar_chart(pd.Series(olasilik).reindex(meta["sira"]))
 
 # --- Sekme 2: Toplu Değerlendirme ------------------------------------
 with sekme2:
-    st.markdown("""
-    <div class="m3-glass-card">
-        <h3 style="margin-top:0;">📑 10 Fotoğraflık Ödev Seti Toplu Değerlendirme</h3>
-        <p style="opacity: 0.85; margin:0;">
-            <b>bina_bilgileri.csv</b> tablosunu ve <b>acik_set</b> içindeki 10 fotoğrafı birlikte yükleyerek tüm seti tek tıkla işleyin.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown("### 📑 10 Fotoğraflık Ödev Seti Toplu Değerlendirme")
+        st.markdown("`bina_bilgileri.csv` tablosunu ve `acik_set` içindeki 10 fotoğrafı birlikte yükleyerek tüm seti tek tıkla işleyin.")
     
     col_c1, col_c2 = st.columns(2, gap="medium")
     with col_c1:
-        csv_dosya = st.file_uploader("bina_bilgileri.csv dosyasını yükleyin", type=["csv"], key="csv")
+        with st.container(border=True):
+            st.markdown("#### 📄 Veri Dosyası")
+            csv_dosya = st.file_uploader("bina_bilgileri.csv dosyasını yükleyin", type=["csv"], key="csv")
     with col_c2:
-        fotolar = st.file_uploader("10 adet hasar fotoğrafını seçin", type=["jpg", "jpeg", "png"],
-                                   accept_multiple_files=True, key="coklu")
+        with st.container(border=True):
+            st.markdown("#### 📸 Hasar Fotoğrafları")
+            fotolar = st.file_uploader("10 adet hasar fotoğrafını seçin", type=["jpg", "jpeg", "png"],
+                                       accept_multiple_files=True, key="coklu")
 
     if st.button("⚡ Toplu Değerlendirmeyi Başlat", disabled=not (csv_dosya and fotolar), use_container_width=True):
         tablo = pd.read_csv(csv_dosya)
@@ -584,12 +731,12 @@ with sekme2:
             ilerleme.progress((i + 1) / len(tablo))
         
         sonuc_df = pd.DataFrame(sonuclar)
-        st.markdown("<div class='m3-glass-card'><h4>📋 Toplu Tahmin Sonuç Tablosu</h4>", unsafe_allow_html=True)
-        st.dataframe(sonuc_df, use_container_width=True)
-        st.download_button("📥 Sonuçları CSV Olarak İndir (Rapor İçin)",
-                           sonuc_df.to_csv(index=False).encode("utf-8-sig"),
-                           file_name="hasar_tahminleri.csv", mime="text/csv")
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown("#### 📋 Toplu Tahmin Sonuç Tablosu")
+            st.dataframe(sonuc_df, use_container_width=True)
+            st.download_button("📥 Sonuçları CSV Olarak İndir (Rapor İçin)",
+                               sonuc_df.to_csv(index=False).encode("utf-8-sig"),
+                               file_name="hasar_tahminleri.csv", mime="text/csv")
 
         with st.expander("🖼️ Kutulu Fotoğraf Galerisi"):
             kolonlar = st.columns(3)
