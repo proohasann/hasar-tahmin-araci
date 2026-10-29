@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Hafta 6 Ödevi — Deprem Sonrası Hasar Tahmin Aracı (şablon)
+Hafta 6 Ödevi — Deprem Sonrası Hasar Tahmin Aracı (Material You & Glassmorphism Sürümü)
 
 Fotoğraftaki çatlakları bir Roboflow modeliyle bulur, çatlak yoğunluğunu sizin
 yazdığınız kuralla hesaplar ve eğittiğiniz Random Forest modeliyle bina hasar
 sınıfını tahmin eder.
 
-Yalnızca "1. ÖĞRENCİNİN DEĞİŞTİRECEĞİ BÖLÜM" kısmını düzenleyin.
-Roboflow API anahtarını bu dosyaya YAZMAYIN; Streamlit'in "Secrets" bölümüne girin.
+Tasarım: Google Material You (Material 3) + Glassmorphism (Buzlu Cam) + Koyu/Açık Tema Desteği
 """
 import json
 import os
@@ -41,16 +40,6 @@ GUVEN_ESIGI = 0.30
 
 
 # (c) Çatlak yoğunluğu kuralı.
-# Kural, bulunan kutulardan 0 ile 1 arasında tek bir sayı üretmelidir.
-# Eğitim verisinde bu sayının hasar sınıfına göre dağılımı:
-#   Hasarsız ~0.25   Hafif ~0.39   Orta ~0.57   Ağır ~0.73   Yıkık ~0.88 (ortalamalar)
-# (train_hasar_modeli.py bu tabloyu yazdırır.) Kuralınızın çıktısı bu ölçeğe uymalıdır.
-#
-# detections : bulunan çatlak kutuları (supervision.Detections)
-#              len(detections)        -> kutu sayısı
-#              detections.xyxy        -> kutu koordinatları [x1, y1, x2, y2]
-#              detections.confidence  -> her kutunun güveni
-# yukseklik, genislik : fotoğrafın piksel boyutu
 def kural_kutu_sayisi(detections, yukseklik, genislik):
     """Başlangıç örneği: kutu sayısı / 10 (en çok 1)."""
     return min(len(detections) / 10, 1.0)
@@ -97,16 +86,16 @@ def kural_ogrenci(detections, yukseklik, genislik):
     return float(np.clip(skor, 0.05, 0.98))
 
 
-# Hangi kuralı kullanacaksınız? (Geliştirdiğimiz optimize kural_ogrenci)
+# Aktif kural olarak öğrenci kuralını belirliyoruz
 CATLAK_KURALI = kural_ogrenci
 
 # ======================================================================
-# 2. SABİT BÖLÜM (değiştirmeyin)
+# 2. SABİT BÖLÜM
 # ======================================================================
 MODEL_YOLU = "models/hasar_modeli.joblib"
 META_YOLU = "models/meta.json"
-ETIKET_RENK = {"Hasarsız": "#2E7D32", "Hafif": "#9E9D24", "Orta": "#EF6C00",
-               "Ağır": "#C62828", "Yıkık": "#4A148C"}
+ETIKET_RENK = {"Hasarsız": "#10B981", "Hafif": "#F59E0B", "Orta": "#F97316",
+               "Ağır": "#EF4444", "Yıkık": "#8B5CF6"}
 
 
 @st.cache_resource
@@ -194,91 +183,182 @@ def aralik_uyarilari(meta, bilgi):
     return uyari
 
 
-# ===== ARAYÜZ =====
-st.set_page_config(page_title="Hasar Tahmin Aracı | Material You", page_icon="🏢", layout="wide")
+# ======================================================================
+# 3. SAYFA AYARI VE TEMA GEÇİŞİ (MATERIAL YOU & GLASSMORPHISM)
+# ======================================================================
+st.set_page_config(page_title="Hasar Tahmin Aracı", page_icon="🏢", layout="wide")
 
-# Material You / Material Design 3 CSS (Koyu ve Açık Tema Uyumlu)
-st.markdown("""
+# Tema Durumu (Koyu / Açık Mod)
+if "koyu_tema" not in st.session_state:
+    st.session_state.koyu_tema = True
+
+# Tema Renk Değişkenleri
+if st.session_state.koyu_tema:
+    tema_ad = "Koyu Mod 🌙"
+    bg_style = "background: radial-gradient(circle at 20% 20%, #1e1b4b 0%, #0f172a 45%, #020617 100%) fixed;"
+    text_color = "#F8FAFC"
+    subtext_color = "#94A3B8"
+    glass_bg = "rgba(30, 41, 59, 0.60)"
+    glass_border = "rgba(255, 255, 255, 0.12)"
+    glass_shadow = "0 8px 32px 0 rgba(0, 0, 0, 0.45)"
+    sidebar_bg = "rgba(15, 23, 42, 0.75)"
+    input_bg = "rgba(15, 23, 42, 0.65)"
+    metric_bg = "rgba(255, 255, 255, 0.05)"
+    accent_gradient = "linear-gradient(135deg, #38BDF8 0%, #818CF8 100%)"
+    hero_bg = "linear-gradient(135deg, rgba(56, 189, 248, 0.12) 0%, rgba(129, 140, 248, 0.14) 100%)"
+else:
+    tema_ad = "Açık Mod ☀️"
+    bg_style = "background: radial-gradient(circle at 20% 20%, #E0E7FF 0%, #F1F5F9 50%, #F8FAFC 100%) fixed;"
+    text_color = "#0F172A"
+    subtext_color = "#475569"
+    glass_bg = "rgba(255, 255, 255, 0.75)"
+    glass_border = "rgba(255, 255, 255, 0.85)"
+    glass_shadow = "0 8px 32px 0 rgba(31, 38, 135, 0.08)"
+    sidebar_bg = "rgba(255, 255, 255, 0.82)"
+    input_bg = "rgba(255, 255, 255, 0.90)"
+    metric_bg = "rgba(0, 0, 0, 0.03)"
+    accent_gradient = "linear-gradient(135deg, #0284C7 0%, #4F46E5 100%)"
+    hero_bg = "linear-gradient(135deg, rgba(2, 132, 199, 0.08) 0%, rgba(79, 70, 229, 0.09) 100%)"
+
+# Özel CSS Enjeksiyonu
+st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
-html, body, [class*="css"] {
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
+html, body, [class*="css"], .stApp {{
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif !important;
+}}
 
-/* Material You Kart Stili (Açık ve Koyu Temaya Duyarlı) */
-.m3-surface {
-    background-color: var(--secondary-background-color);
-    border: 1px solid rgba(128, 128, 128, 0.15);
+.stApp {{
+    {bg_style}
+    color: {text_color} !important;
+}}
+
+/* Buzlu Cam Kenar Çubuğu (Glassmorphism Sidebar) */
+[data-testid="stSidebar"] {{
+    background: {sidebar_bg} !important;
+    backdrop-filter: blur(18px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(18px) saturate(180%) !important;
+    border-right: 1px solid {glass_border} !important;
+    box-shadow: {glass_shadow} !important;
+}}
+
+/* Material You / Glassmorphism Kart Sınıfları */
+.m3-glass-card {{
+    background: {glass_bg};
+    backdrop-filter: blur(16px) saturate(170%);
+    -webkit-backdrop-filter: blur(16px) saturate(170%);
+    border: 1px solid {glass_border};
     border-radius: 20px;
-    padding: 22px;
-    margin-bottom: 20px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
-    transition: all 0.25s ease-in-out;
-}
-.m3-surface:hover {
-    border-color: rgba(33, 150, 243, 0.35);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.07);
-}
-
-/* Yuvarlak Material You Butonları */
-.stButton > button {
-    border-radius: 9999px !important;
-    font-weight: 600 !important;
-    padding: 10px 28px !important;
-    letter-spacing: 0.3px !important;
-    transition: all 0.2s ease !important;
-    border: none !important;
-}
-.stButton > button:hover {
+    padding: 24px;
+    margin-bottom: 22px;
+    box-shadow: {glass_shadow};
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}}
+.m3-glass-card:hover {{
     transform: translateY(-2px);
-    box-shadow: 0 6px 18px rgba(33, 150, 243, 0.25) !important;
-}
+    box-shadow: 0 12px 36px 0 rgba(0, 0, 0, 0.18);
+    border-color: rgba(99, 102, 241, 0.4);
+}}
 
-/* Sekmeler (Material 3 Segmented Pills) */
-.stTabs [data-baseweb="tab-list"] {
+/* Form Input ve Select Alanları */
+div[data-baseweb="select"] > div,
+div[data-baseweb="input"] > div,
+div[data-baseweb="base-input"] {{
+    background-color: {input_bg} !important;
+    border-radius: 14px !important;
+    border: 1px solid {glass_border} !important;
+    color: {text_color} !important;
+    backdrop-filter: blur(10px) !important;
+    transition: all 0.2s ease !important;
+}}
+div[data-baseweb="select"] > div:hover,
+div[data-baseweb="input"] > div:focus-within {{
+    border-color: #6366F1 !important;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
+}}
+
+/* Dosya Yükleyici (File Uploader) Glass Tasarımı */
+[data-testid="stFileUploader"] {{
+    background: {glass_bg} !important;
+    backdrop-filter: blur(14px) !important;
+    border: 2px dashed {glass_border} !important;
+    border-radius: 20px !important;
+    padding: 16px !important;
+    transition: all 0.25s ease !important;
+}}
+[data-testid="stFileUploader"]:hover {{
+    border-color: #6366F1 !important;
+    background: rgba(99, 102, 241, 0.06) !important;
+}}
+
+/* Material You Yuvarlak Butonlar */
+.stButton > button {{
+    background: {accent_gradient} !important;
+    color: white !important;
+    border-radius: 9999px !important;
+    padding: 10px 30px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.4px !important;
+    border: none !important;
+    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35) !important;
+    transition: all 0.2s ease !important;
+}}
+.stButton > button:hover {{
+    transform: translateY(-2px) scale(1.01) !important;
+    box-shadow: 0 8px 25px rgba(99, 102, 241, 0.5) !important;
+}}
+
+/* Metrik Kartları */
+div[data-testid="stMetric"] {{
+    background: {metric_bg} !important;
+    backdrop-filter: blur(12px) !important;
+    border: 1px solid {glass_border} !important;
+    border-radius: 16px !important;
+    padding: 12px 18px !important;
+    box-shadow: {glass_shadow} !important;
+}}
+
+/* Sekmeler (Material 3 Segmented Control) */
+.stTabs [data-baseweb="tab-list"] {{
     gap: 8px;
-    background-color: var(--secondary-background-color);
+    background: {glass_bg};
+    backdrop-filter: blur(14px);
     padding: 6px;
     border-radius: 18px;
-    border: 1px solid rgba(128, 128, 128, 0.12);
-}
-.stTabs [data-baseweb="tab"] {
+    border: 1px solid {glass_border};
+}}
+.stTabs [data-baseweb="tab"] {{
     border-radius: 14px;
-    font-weight: 600;
+    font-weight: 700;
+    color: {subtext_color};
     padding: 8px 20px;
-}
-
-/* Giriş Kutuları Köşe Yuvarlama */
-div[data-baseweb="select"] > div,
-div[data-baseweb="input"] > div {
-    border-radius: 14px !important;
-}
-
-/* İlerleme ve İstatistik Metrikleri */
-div[data-testid="stMetric"] {
-    background-color: var(--secondary-background-color);
-    border: 1px solid rgba(128, 128, 128, 0.12);
-    border-radius: 16px;
-    padding: 14px 18px;
-}
+}}
+.stTabs [aria-selected="true"] {{
+    background: {accent_gradient} !important;
+    color: white !important;
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+}}
 </style>
 """, unsafe_allow_html=True)
 
-# Material You Hero Banner
-st.markdown("""
-<div style="background: linear-gradient(135deg, rgba(33, 150, 243, 0.12) 0%, rgba(103, 58, 183, 0.12) 100%); 
-            border: 1px solid rgba(33, 150, 243, 0.22); border-radius: 22px; padding: 24px 28px; margin-bottom: 22px;">
-    <span style="display:inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; 
-                 letter-spacing: 0.6px; text-transform: uppercase; background: rgba(33, 150, 243, 0.18); color: #2196F3; margin-bottom: 8px;">
-        🏢 İNŞAAT MÜHENDİSLİĞİNDE YAPAY ZEKÂ UYGULAMALARI
-    </span>
-    <h1 style="margin: 4px 0 8px 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;">
-        Deprem Sonrası Hasar Tahmin Aracı
-    </h1>
-    <p style="margin: 0; opacity: 0.85; font-size: 0.95rem; line-height: 1.5;">
-        Tablodan öğrenen Random Forest sınıflandırıcısı ve fotoğraftan çatlak tespit eden Roboflow Vision modelini birleştiren karar destek platformu.
-    </p>
+# Üst Başlık (Hero Glass Banner)
+st.markdown(f"""
+<div class="m3-glass-card" style="background: {hero_bg}; padding: 26px 30px; margin-bottom: 24px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        <div>
+            <span style="display:inline-block; padding: 4px 14px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; 
+                         letter-spacing: 0.6px; text-transform: uppercase; background: rgba(99, 102, 241, 0.22); color: #818CF8; margin-bottom: 8px;">
+                🏢 İNŞAAT MÜHENDİSLİĞİNDE YAPAY ZEKÂ UYGULAMALARI
+            </span>
+            <h1 style="margin: 4px 0 8px 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px;">
+                Deprem Sonrası Hasar Tahmin Aracı
+            </h1>
+            <p style="margin: 0; opacity: 0.85; font-size: 0.95rem; max-width: 800px; line-height: 1.5;">
+                Tablodan öğrenen Random Forest sınıflandırıcısı ve fotoğraftan çatlak tespit eden Roboflow derin öğrenme modelini birleştiren hibrit karar destek sistemi.
+            </p>
+        </div>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -289,8 +369,20 @@ except Exception as e:
              "meta.json dosyalarının olduğundan emin olun.")
     st.stop()
 
-# --- Kenar çubuğu: model bilgisi --------------------------------------
+# ======================================================================
+# 4. KENAR ÇUBUĞU (SIDEBAR)
+# ======================================================================
 with st.sidebar:
+    # Tema Değiştirici (Light / Dark Mode Toggle)
+    col_t1, col_t2 = st.columns([2, 1.2])
+    with col_t1:
+        st.markdown(f"**Tema:** `{tema_ad}`")
+    with col_t2:
+        if st.button("🌓 Değiştir", help="Açık ve Koyu tema arasında geçiş yapın"):
+            st.session_state.koyu_tema = not st.session_state.koyu_tema
+            st.rerun()
+
+    st.markdown("---")
     st.markdown("### 📊 Model Performansı")
     m = meta["metrikler"]
     col_m1, col_m2 = st.columns(2)
@@ -338,6 +430,7 @@ with st.sidebar:
             st.rerun()
     else:
         st.success("✅ Roboflow API Anahtarı Hazır")
+    
     try:
         import sklearn
         if sklearn.__version__ != meta.get("sklearn_surumu"):
@@ -347,74 +440,120 @@ with st.sidebar:
     except Exception:
         pass
 
-sekme1, sekme2 = st.tabs(["Tek bina", "Toplu değerlendirme (ödev seti)"])
+# ======================================================================
+# 5. ANA EKRAN SEKMELERİ
+# ======================================================================
+sekme1, sekme2 = st.tabs(["🏛️ Tek Bina Değerlendirme", "📑 Toplu Değerlendirme (Ödev Seti)"])
 
-# --- Sekme 1: tek bina -----------------------------------------------
+# --- Sekme 1: Tek Bina -----------------------------------------------
 with sekme1:
-    sol, sag = st.columns(2)
+    sol, sag = st.columns(2, gap="medium")
     with sol:
-        st.subheader("Bina bilgileri")
+        st.markdown("""
+        <div class="m3-glass-card">
+            <h3 style="margin-top:0;">📋 Yapısal Bina Parametreleri</h3>
+        """, unsafe_allow_html=True)
         yapi = st.selectbox("Yapı türü", meta["yapi_turleri"], index=meta["yapi_turleri"].index("Betonarme")
                             if "Betonarme" in meta["yapi_turleri"] else 0)
-        kat = st.number_input("Kat sayısı", min_value=1, max_value=60, value=5, step=1)
-        yil = st.number_input("İnşaat yılı", min_value=1800, max_value=2030, value=1995, step=1)
+        c_k1, c_k2 = st.columns(2)
+        with c_k1:
+            kat = st.number_input("Kat sayısı", min_value=1, max_value=60, value=5, step=1)
+        with c_k2:
+            yil = st.number_input("İnşaat yılı", min_value=1800, max_value=2030, value=1995, step=1)
         bolge = st.selectbox("Deprem bölgesi", meta["deprem_bolgeleri"])
-        pga = st.number_input("Beklenen PGA (g)", min_value=0.0, max_value=2.0, value=0.30, step=0.01)
-        defo = st.number_input("Deformasyon (%)", min_value=0.0, max_value=100.0, value=1.0, step=0.1)
-        dos = st.radio("Döşeme hasarı", [0, 1], format_func=lambda v: "Var" if v else "Yok", horizontal=True)
-        kol = st.radio("Kolon hasarı", [0, 1], format_func=lambda v: "Var" if v else "Yok", horizontal=True)
+        c_p1, c_p2 = st.columns(2)
+        with c_p1:
+            pga = st.number_input("Beklenen PGA (g)", min_value=0.0, max_value=2.0, value=0.30, step=0.01)
+        with c_p2:
+            defo = st.number_input("Deformasyon (%)", min_value=0.0, max_value=100.0, value=1.0, step=0.1)
+        c_d1, c_d2 = st.columns(2)
+        with c_d1:
+            dos = st.radio("Döşeme hasarı", [0, 1], format_func=lambda v: "Var" if v else "Yok", horizontal=True)
+        with c_d2:
+            kol = st.radio("Kolon hasarı", [0, 1], format_func=lambda v: "Var" if v else "Yok", horizontal=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
     with sag:
-        st.subheader("Hasar fotoğrafı")
-        foto = st.file_uploader("Bina fotoğrafı", type=["jpg", "jpeg", "png"], key="tek")
+        st.markdown("""
+        <div class="m3-glass-card">
+            <h3 style="margin-top:0;">📸 Duvar Hasar Fotoğrafı</h3>
+        """, unsafe_allow_html=True)
+        foto = st.file_uploader("Duvar çatlak fotoğrafı yükleyin", type=["jpg", "jpeg", "png"], key="tek")
         if foto is not None:
-            st.image(foto, caption="Yüklenen fotoğraf", width="stretch")
+            st.image(foto, caption="Yüklenen Fotoğraf", use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     bilgi = {"yapi_turu": yapi, "kat_sayisi": kat, "insaat_yili": yil, "deprem_bolgesi": bolge,
              "pga_g": pga, "deformasyon_yuzde": defo, "doseme_hasari": dos, "kolon_hasari": kol}
     for u in aralik_uyarilari(meta, bilgi):
-        st.warning("Ekstrapolasyon uyarısı: " + u)
+        st.warning("⚠️ Ekstrapolasyon Uyarısı: " + u)
 
-    if st.button("Hasar sınıfını tahmin et", type="primary", disabled=foto is None):
-        try:
-            img = goruntu_yukle(foto)
-            det = tespit_et(img, model_id=aktif_model_id, guven_esigi=guven_esigi_secim)
-            catl = catlak_yogunlugu_hesapla(det, img)
-        except Exception as e:
-            st.error(f"Çatlak tespiti başarısız: {e}")
-            st.stop()
-        sinif, olasilik = tahmin_et(model, meta, bilgi, catl)
-        st.divider()
-        a, b = st.columns(2)
-        with a:
-            st.image(kutulari_ciz(img, det), caption=f"{len(det)} çatlak kutusu bulundu",
-                     width="stretch")
-            if len(det):
-                adlar = sorted(set(det.data.get("class_name", [])))
-                if adlar:
-                    st.caption("Modelin sınıf adları: " + ", ".join(adlar))
-        with b:
-            st.metric("Hesaplanan Çatlak Yoğunluğu", f"{catl:.2f}")
-            renk = ETIKET_RENK.get(sinif, '#2196F3')
-            st.markdown(f"""
-            <div style="background: {renk}18; border: 1.5px solid {renk}; border-radius: 18px; padding: 14px 20px; margin: 12px 0;">
-                <span style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: {renk};">
-                    Tahmin Edilen Hasar Sınıfı
-                </span>
-                <h2 style="margin: 4px 0 0 0; font-size: 1.9rem; font-weight: 800; color: {renk};">
-                    {sinif}
-                </h2>
-            </div>
-            """, unsafe_allow_html=True)
-            st.bar_chart(pd.Series(olasilik).reindex(meta["sira"]))
+    if st.button("🚀 Hasar Sınıfını Tahmin Et", type="primary", disabled=foto is None, use_container_width=True):
+        with st.spinner("Roboflow çatlak tespiti ve Random Forest tahmini yapılıyor..."):
+            try:
+                img = goruntu_yukle(foto)
+                det = tespit_et(img, model_id=aktif_model_id, guven_esigi=guven_esigi_secim)
+                catl = catlak_yogunlugu_hesapla(det, img)
+            except Exception as e:
+                st.error(f"Çatlak tespiti başarısız: {e}")
+                st.stop()
+            sinif, olasilik = tahmin_et(model, meta, bilgi, catl)
+            
+            st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
+            res_sol, res_sag = st.columns(2, gap="medium")
+            with res_sol:
+                st.markdown("""<div class="m3-glass-card">
+                    <h3 style="margin-top:0;">🎯 Tespit Edilen Çatlaklar</h3>
+                """, unsafe_allow_html=True)
+                st.image(kutulari_ciz(img, det), caption=f"{len(det)} adet çatlak kutusu tespit edildi",
+                         use_container_width=True)
+                if len(det):
+                    adlar = sorted(set(det.data.get("class_name", [])))
+                    if adlar:
+                        st.caption("Model sınıf adları: " + ", ".join(adlar))
+                st.markdown("</div>", unsafe_allow_html=True)
 
-# --- Sekme 2: toplu değerlendirme ------------------------------------
+            with res_sag:
+                renk = ETIKET_RENK.get(sinif, '#38BDF8')
+                st.markdown(f"""
+                <div class="m3-glass-card" style="border-left: 6px solid {renk};">
+                    <span style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: {renk};">
+                        Tahmin Edilen Hasar Sınıfı
+                    </span>
+                    <h2 style="margin: 4px 0 12px 0; font-size: 2.3rem; font-weight: 800; color: {renk};">
+                        {sinif}
+                    </h2>
+                    <p style="margin: 0; opacity: 0.85; font-size: 0.95rem;">
+                        Hesaplanan Çatlak Yoğunluğu: <b>{catl:.2f}</b> (Ölçek: 0 - 1)
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                st.markdown("""<div class="m3-glass-card">
+                    <h4 style="margin-top:0;">📊 Sınıf Olasılık Dağılımı</h4>
+                """, unsafe_allow_html=True)
+                st.bar_chart(pd.Series(olasilik).reindex(meta["sira"]))
+                st.markdown("</div>", unsafe_allow_html=True)
+
+# --- Sekme 2: Toplu Değerlendirme ------------------------------------
 with sekme2:
-    st.write("Bina bilgileri tablosunu (CSV) ve fotoğrafları birlikte yükleyin. Tablodaki `dosya` "
-             "sütunu fotoğraf adlarıyla aynı olmalıdır.")
-    csv_dosya = st.file_uploader("bina_bilgileri.csv", type=["csv"], key="csv")
-    fotolar = st.file_uploader("Fotoğraflar", type=["jpg", "jpeg", "png"],
-                               accept_multiple_files=True, key="coklu")
-    if st.button("Toplu değerlendir", disabled=not (csv_dosya and fotolar)):
+    st.markdown("""
+    <div class="m3-glass-card">
+        <h3 style="margin-top:0;">📑 10 Fotoğraflık Ödev Seti Toplu Değerlendirme</h3>
+        <p style="opacity: 0.85; margin:0;">
+            <b>bina_bilgileri.csv</b> tablosunu ve <b>acik_set</b> içindeki 10 fotoğrafı birlikte yükleyerek tüm seti tek tıkla işleyin.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col_c1, col_c2 = st.columns(2, gap="medium")
+    with col_c1:
+        csv_dosya = st.file_uploader("bina_bilgileri.csv dosyasını yükleyin", type=["csv"], key="csv")
+    with col_c2:
+        fotolar = st.file_uploader("10 adet hasar fotoğrafını seçin", type=["jpg", "jpeg", "png"],
+                                   accept_multiple_files=True, key="coklu")
+
+    if st.button("⚡ Toplu Değerlendirmeyi Başlat", disabled=not (csv_dosya and fotolar), use_container_width=True):
         tablo = pd.read_csv(csv_dosya)
         zorunlu = ["dosya", "yapi_turu", "kat_sayisi", "insaat_yili", "deprem_bolgesi",
                    "pga_g", "deformasyon_yuzde", "doseme_hasari", "kolon_hasari"]
@@ -425,6 +564,7 @@ with sekme2:
         fotolar_ad = {f.name: f for f in fotolar}
         sonuclar, galeri = [], []
         ilerleme = st.progress(0.0)
+        
         for i, satir in enumerate(tablo.to_dict("records")):
             f = fotolar_ad.get(satir["dosya"])
             if f is None:
@@ -442,12 +582,16 @@ with sekme2:
             except Exception as e:
                 sonuclar.append({"dosya": satir["dosya"], "durum": f"hata: {e}"})
             ilerleme.progress((i + 1) / len(tablo))
+        
         sonuc_df = pd.DataFrame(sonuclar)
-        st.dataframe(sonuc_df, width="stretch")
-        st.download_button("Sonuçları CSV olarak indir",
+        st.markdown("<div class='m3-glass-card'><h4>📋 Toplu Tahmin Sonuç Tablosu</h4>", unsafe_allow_html=True)
+        st.dataframe(sonuc_df, use_container_width=True)
+        st.download_button("📥 Sonuçları CSV Olarak İndir (Rapor İçin)",
                            sonuc_df.to_csv(index=False).encode("utf-8-sig"),
                            file_name="hasar_tahminleri.csv", mime="text/csv")
-        with st.expander("Kutulu fotoğraflar"):
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        with st.expander("🖼️ Kutulu Fotoğraf Galerisi"):
             kolonlar = st.columns(3)
             for j, (ad, g, s) in enumerate(galeri):
-                kolonlar[j % 3].image(g, caption=f"{ad} → {s}", width="stretch")
+                kolonlar[j % 3].image(g, caption=f"{ad} → {s}", use_container_width=True)
