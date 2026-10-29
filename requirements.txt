@@ -1,0 +1,9 @@
+streamlit
+joblib
+scikit-learn
+pandas
+numpy
+pillow
+opencv-python-headless
+supervision
+inference-sdk

@@ -1,0 +1,84 @@
+{
+  "ozellikler": [
+    "kat_sayisi",
+    "insaat_yili",
+    "pga_g",
+    "catl_yogunluk",
+    "deformasyon_yuzde",
+    "doseme_hasari",
+    "kolon_hasari",
+    "yapi_turu_Betonarme",
+    "yapi_turu_Yığma",
+    "yapi_turu_Çelik",
+    "deprem_bolgesi_2. Derece",
+    "deprem_bolgesi_3. Derece",
+    "yonetmelik_oncesi"
+  ],
+  "yapi_turleri": [
+    "Ahşap",
+    "Betonarme",
+    "Yığma",
+    "Çelik"
+  ],
+  "deprem_bolgeleri": [
+    "1. Derece",
+    "2. Derece",
+    "3. Derece"
+  ],
+  "aralik": {
+    "kat_sayisi": [
+      1.0,
+      12.0
+    ],
+    "insaat_yili": [
+      1970.0,
+      2022.0
+    ],
+    "pga_g": [
+      0.045,
+      0.8
+    ],
+    "catl_yogunluk": [
+      0.028,
+      0.986
+    ],
+    "deformasyon_yuzde": [
+      0.06,
+      8.0
+    ],
+    "doseme_hasari": [
+      0.0,
+      1.0
+    ],
+    "kolon_hasari": [
+      0.0,
+      1.0
+    ]
+  },
+  "sira": [
+    "Hasarsız",
+    "Hafif",
+    "Orta",
+    "Ağır",
+    "Yıkık"
+  ],
+  "parametreler": {
+    "n_estimators": 200,
+    "max_depth": 10,
+    "min_samples_leaf": 1,
+    "class_weight": "balanced"
+  },
+  "metrikler": {
+    "egitim_dogrulugu": 0.9975,
+    "test_dogrulugu": 0.86,
+    "cv_dogrulugu": 0.832,
+    "recall": {
+      "Hasarsız": 0.886,
+      "Hafif": 0.76,
+      "Orta": 0.85,
+      "Ağır": 1.0,
+      "Yıkık": 0.857
+    }
+  },
+  "sklearn_surumu": "1.9.1"
+}
