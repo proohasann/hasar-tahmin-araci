@@ -8,7 +8,7 @@ Bu dosya:
   2. Roboflow Universe üzerinden 4 farklı derin öğrenme çatlak modelini ve özel model desteğini sunar.
   3. Çatlak tespitlerinden inşaat hasar ölçeğine uygun kural tabanlı çatlak yoğunluğu hesaplar.
   4. Tablo + görsel verilerini birleştirerek hasar sınıfı tahmini üretir.
-  5. Material You ve Glassmorphism tasarım diliyle hem Koyu hem de Açık Modu destekler.
+  5. Material You ve Glassmorphism tasarım diliyle CSS Variables üzerinden Koyu ve Açık Modu destekler.
   6. Tek bina değerlendirmesi ve 10 fotoğraflık ödev veri seti toplu analizi sunar.
 """
 
@@ -182,106 +182,156 @@ def aralik_uyarilari(meta, bilgi):
 # ======================================================================
 st.set_page_config(page_title="Hasar Tahmin Aracı", page_icon="🏢", layout="wide")
 
-# Tema Durumu (Koyu / Açık Mod)
+# Tema Durumu (Koyu / Açık Mod Toggle)
 if "koyu_tema" not in st.session_state:
     st.session_state.koyu_tema = True
 
-# Tema Renk Tanımlamaları (Her iki modda yüksek kontrast ve net okunabilirlik)
+# Tema Renk Değişkenleri (CSS Variables Sözlüğü)
 if st.session_state.koyu_tema:
     tema_ad = "Koyu Mod 🌙"
-    color_scheme = "dark"
-    app_bg_plain = "#0F172A"
-    secondary_bg = "#1E293B"
-    bg_style = "background: radial-gradient(circle at 20% 20%, #1e1b4b 0%, #0f172a 45%, #020617 100%) fixed;"
-    text_color = "#F8FAFC"
-    subtext_color = "#94A3B8"
-    glass_bg = "rgba(30, 41, 59, 0.70)"
-    glass_border = "rgba(255, 255, 255, 0.12)"
-    glass_shadow = "0 8px 32px 0 rgba(0, 0, 0, 0.45)"
-    sidebar_bg = "rgba(15, 23, 42, 0.92)"
-    input_bg = "rgba(30, 41, 59, 0.85)"
-    input_text = "#F8FAFC"
-    metric_bg = "rgba(30, 41, 59, 0.65)"
-    metric_val_color = "#38BDF8"
-    stepper_bg = "rgba(51, 65, 85, 0.8)"
-    stepper_hover = "#475569"
-    accent_gradient = "linear-gradient(135deg, #0284C7 0%, #6366F1 100%)"
-    hero_bg = "linear-gradient(135deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.85) 100%)"
-    hero_title = "#F8FAFC"
-    hero_sub = "#CBD5E1"
-    hero_badge_bg = "rgba(99, 102, 241, 0.22)"
-    hero_badge_text = "#A5B4FC"
-    hero_badge_border = "rgba(99, 102, 241, 0.4)"
-    btn_sec_bg = "rgba(51, 65, 85, 0.8)"
-    btn_sec_text = "#F8FAFC"
+    css_vars = {
+        "--bg-gradient": "radial-gradient(circle at 20% 20%, #1e1b4b 0%, #0f172a 45%, #020617 100%) fixed",
+        "--app-bg": "#0F172A",
+        "--text-color": "#F8FAFC",
+        "--subtext-color": "#94A3B8",
+        "--card-bg": "rgba(30, 41, 59, 0.70)",
+        "--border-color": "rgba(255, 255, 255, 0.12)",
+        "--card-shadow": "0 8px 32px 0 rgba(0, 0, 0, 0.45)",
+        "--sidebar-bg": "rgba(15, 23, 42, 0.92)",
+        "--header-bg": "rgba(15, 23, 42, 0.75)",
+        "--input-bg": "rgba(30, 41, 59, 0.85)",
+        "--input-text": "#F8FAFC",
+        "--input-border": "rgba(255, 255, 255, 0.15)",
+        "--stepper-bg": "rgba(51, 65, 85, 0.80)",
+        "--stepper-hover": "#475569",
+        "--table-bg": "rgba(30, 41, 59, 0.80)",
+        "--table-header-bg": "rgba(15, 23, 42, 0.90)",
+        "--table-cell-bg": "rgba(30, 41, 59, 0.60)",
+        "--table-text": "#F8FAFC",
+        "--metric-bg": "rgba(30, 41, 59, 0.65)",
+        "--metric-val-color": "#38BDF8",
+        "--accent-gradient": "linear-gradient(135deg, #0284C7 0%, #6366F1 100%)",
+        "--accent-color": "#6366F1",
+        "--btn-sec-bg": "rgba(30, 41, 59, 0.85)",
+        "--hero-bg": "linear-gradient(135deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.85) 100%)",
+        "--hero-title": "#F8FAFC",
+        "--hero-sub": "#CBD5E1",
+        "--hero-badge-bg": "rgba(99, 102, 241, 0.22)",
+        "--hero-badge-text": "#A5B4FC",
+        "--hero-badge-border": "rgba(99, 102, 241, 0.40)",
+        "--code-bg": "rgba(30, 41, 59, 0.90)",
+        "--code-text": "#38BDF8",
+        "color-scheme": "dark",
+    }
 else:
     tema_ad = "Açık Mod ☀️"
-    color_scheme = "light"
-    app_bg_plain = "#F8FAFC"
-    secondary_bg = "#FFFFFF"
-    bg_style = "background: radial-gradient(circle at 15% 15%, #F1F5F9 0%, #F8FAFC 45%, #FFFFFF 100%) fixed;"
-    text_color = "#0F172A"          # Derin gece laciverti/siyah, %100 kristal netlikte
-    subtext_color = "#334155"       # Koyu antrasit gri, net okunur
-    glass_bg = "rgba(255, 255, 255, 0.94)"
-    glass_border = "#CBD5E1"        # Belirgin zarif kenarlık
-    glass_shadow = "0 4px 20px 0 rgba(15, 23, 42, 0.08)"
-    sidebar_bg = "#F8FAFC"          # Ferah açık zemin
-    input_bg = "#FFFFFF"            # Bembeyaz input zemini
-    input_text = "#0F172A"          # Input içi koyu siyah metin
-    metric_bg = "#FFFFFF"           # Bembeyaz metrik kartı
-    metric_val_color = "#0F172A"    # Güçlü koyu lacivert sayı
-    stepper_bg = "#E2E8F0"          # + / - butonları için açık gri zemin
-    stepper_hover = "#CBD5E1"
-    accent_gradient = "linear-gradient(135deg, #0284C7 0%, #4F46E5 100%)"
-    hero_bg = "linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 50%, #F8FAFC 100%)"
-    hero_title = "#1E1B4B"          # Derin lacivert başlık
-    hero_sub = "#334155"
-    hero_badge_bg = "rgba(79, 70, 229, 0.12)"
-    hero_badge_text = "#4338CA"
-    hero_badge_border = "rgba(79, 70, 229, 0.3)"
-    btn_sec_bg = "#F1F5F9"
-    btn_sec_text = "#0F172A"
+    css_vars = {
+        "--bg-gradient": "radial-gradient(circle at 15% 15%, #F1F5F9 0%, #F8FAFC 45%, #FFFFFF 100%) fixed",
+        "--app-bg": "#F8FAFC",
+        "--text-color": "#0F172A",
+        "--subtext-color": "#334155",
+        "--card-bg": "rgba(255, 255, 255, 0.70)",   # Glassmorphism yarı saydam beyaz (0.7)
+        "--border-color": "rgba(203, 213, 225, 0.85)",
+        "--card-shadow": "0 6px 24px 0 rgba(15, 23, 42, 0.08)",
+        "--sidebar-bg": "rgba(248, 250, 252, 0.85)",
+        "--header-bg": "rgba(255, 255, 255, 0.75)",
+        "--input-bg": "#F4F6F9",                     # Uçuk gri form zeminleri (#f4f6f9)
+        "--input-text": "#0F172A",
+        "--input-border": "#CBD5E1",
+        "--stepper-bg": "#E2E8F0",
+        "--stepper-hover": "#CBD5E1",
+        "--table-bg": "#FFFFFF",
+        "--table-header-bg": "#F1F5F9",
+        "--table-cell-bg": "#FFFFFF",
+        "--table-text": "#0F172A",
+        "--metric-bg": "rgba(255, 255, 255, 0.85)",
+        "--metric-val-color": "#0F172A",
+        "--accent-gradient": "linear-gradient(135deg, #0284C7 0%, #4F46E5 100%)",
+        "--accent-color": "#4F46E5",
+        "--btn-sec-bg": "#FFFFFF",
+        "--hero-bg": "linear-gradient(135deg, rgba(238, 242, 255, 0.85) 0%, rgba(224, 231, 255, 0.75) 50%, rgba(248, 250, 252, 0.90) 100%)",
+        "--hero-title": "#1E1B4B",
+        "--hero-sub": "#334155",
+        "--hero-badge-bg": "rgba(79, 70, 229, 0.12)",
+        "--hero-badge-text": "#4338CA",
+        "--hero-badge-border": "rgba(79, 70, 229, 0.25)",
+        "--code-bg": "#F1F5F9",
+        "--code-text": "#4F46E5",
+        "color-scheme": "light",
+    }
+
+# CSS Variables Bloğu Hazırla
+css_variables_str = "\n    ".join([f"{k}: {v};" for k, v in css_vars.items()])
 
 # Kapsamlı ve Güçlü Özel CSS Enjeksiyonu
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
-/* 1. Streamlit Değişkenlerini Zorla Güncelle */
-:root {{
-    color-scheme: {color_scheme} !important;
-    --text-color: {text_color} !important;
-    --background-color: {app_bg_plain} !important;
-    --secondary-background-color: {secondary_bg} !important;
-    --primary-color: #4F46E5 !important;
+/* ==================================================================== */
+/* 1. CSS RENK DEĞİŞKENLERİ (CSS VARIABLES)                             */
+/* ==================================================================== */
+:root, [data-theme="light"], [data-theme="dark"], .stApp {{
+    {css_variables_str}
+    --text-color: var(--text-color) !important;
+    --background-color: var(--app-bg) !important;
+    --secondary-background-color: var(--input-bg) !important;
+    --primary-color: var(--accent-color) !important;
 }}
 
-/* 2. Temel Tipografi ve Arka Plan */
+/* ==================================================================== */
+/* 2. TEMEL TİPOGRAFİ VE SAYFA ARKA PLANI                               */
+/* ==================================================================== */
 html, body, .stApp {{
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-    {bg_style}
-    color: {text_color} !important;
+    background: var(--bg-gradient) !important;
+    color: var(--text-color) !important;
 }}
 
-/* 3. Tüm Başlıklar ve Genel Metinler */
+/* ==================================================================== */
+/* 3. STREAMLIT ÜST BARI (HEADER / TOOLBAR)                             */
+/* ==================================================================== */
+header[data-testid="stHeader"],
+[data-testid="stHeader"] {{
+    background-color: var(--header-bg) !important;
+    background: var(--header-bg) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+}}
+header[data-testid="stHeader"] * {{
+    color: var(--text-color) !important;
+    fill: var(--text-color) !important;
+}}
+[data-testid="stDecoration"] {{
+    display: none !important;
+}}
+
+/* ==================================================================== */
+/* 4. TÜM METİNLER, BAŞLIKLAR VE PARAGRAFLAR                            */
+/* ==================================================================== */
 h1, h2, h3, h4, h5, h6,
 .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
 [data-testid="stMarkdownContainer"] h1, [data-testid="stMarkdownContainer"] h2, [data-testid="stMarkdownContainer"] h3,
 [data-testid="stMarkdownContainer"] p, [data-testid="stMarkdownContainer"] span, [data-testid="stMarkdownContainer"] strong,
 [data-testid="stMarkdownContainer"] li,
 .stCaption, [data-testid="stCaptionContainer"] p, [data-testid="stCaptionContainer"] span {{
-    color: {text_color} !important;
+    color: var(--text-color) !important;
 }}
 
-/* 4. Kenar Çubuğu (Sidebar) */
+/* ==================================================================== */
+/* 5. KENAR ÇUBUĞU (SIDEBAR) GLASSMORPHISM                              */
+/* ==================================================================== */
 [data-testid="stSidebar"] {{
-    background-color: {sidebar_bg} !important;
-    background: {sidebar_bg} !important;
-    border-right: 1.5px solid {glass_border} !important;
-    box-shadow: {glass_shadow} !important;
+    background-color: var(--sidebar-bg) !important;
+    background: var(--sidebar-bg) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border-right: 1.5px solid var(--border-color) !important;
+    box-shadow: var(--card-shadow) !important;
 }}
 [data-testid="stSidebar"] * {{
-    color: {text_color};
+    color: var(--text-color);
 }}
 [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
 [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] span,
@@ -295,120 +345,248 @@ h1, h2, h3, h4, h5, h6,
 [data-testid="stSidebar"] .stCaption p,
 [data-testid="stSidebar"] .stCaption span,
 [data-testid="stSidebar"] small {{
-    color: {text_color} !important;
+    color: var(--text-color) !important;
 }}
 
-/* 5. Metrik Kartları (Sidebar) */
+/* ==================================================================== */
+/* 6. METRİK KARTLARI (SIDEBAR)                                         */
+/* ==================================================================== */
 div[data-testid="stMetric"] {{
-    background: {metric_bg} !important;
-    border: 1.5px solid {glass_border} !important;
+    background: var(--metric-bg) !important;
+    border: 1.5px solid var(--border-color) !important;
     border-radius: 16px !important;
-    padding: 14px 18px !important;
-    box-shadow: {glass_shadow} !important;
+    padding: 12px 14px !important;
+    box-shadow: var(--card-shadow) !important;
+    backdrop-filter: blur(14px) !important;
+    -webkit-backdrop-filter: blur(14px) !important;
 }}
 [data-testid="stMetricLabel"],
 [data-testid="stMetricLabel"] *,
 div[data-testid="stMetric"] label {{
-    color: {subtext_color} !important;
+    color: var(--subtext-color) !important;
     font-weight: 700 !important;
-    font-size: 0.88rem !important;
+    font-size: 0.84rem !important;
+    white-space: nowrap !important;
 }}
 [data-testid="stMetricValue"],
 [data-testid="stMetricValue"] *,
 div[data-testid="stMetric"] div {{
-    color: {metric_val_color} !important;
+    color: var(--metric-val-color) !important;
     font-weight: 800 !important;
-    font-size: 1.95rem !important;
+    font-size: 1.45rem !important;
+    white-space: nowrap !important;
 }}
 
-/* 6. Form Alanı Etiketleri (Labels) */
+/* ==================================================================== */
+/* 7. FORM ETİKETLERİ (WIDGET LABELS)                                   */
+/* ==================================================================== */
 label,
 .stWidgetLabel,
 [data-testid="stWidgetLabel"],
 [data-testid="stWidgetLabel"] label,
 [data-testid="stWidgetLabel"] p,
 [data-testid="stWidgetLabel"] span {{
-    color: {text_color} !important;
+    color: var(--text-color) !important;
     font-weight: 700 !important;
     font-size: 0.92rem !important;
 }}
 
-/* 7. Input Kutuları, Selectbox ve Sayı Girişleri */
+/* ==================================================================== */
+/* 8. FORM ELEMANLARI (SELECTBOX, NUMBER INPUT, TEXT INPUT)             */
+/* ==================================================================== */
+/* Kapsayıcı zeminleri (Açık Modda #F4F6F9 Uçuk Gri, Koyu Modda Saydam) */
+div[data-baseweb="select"],
 div[data-baseweb="select"] > div,
+div[data-baseweb="select"] div,
+div[data-baseweb="input"],
 div[data-baseweb="input"] > div,
-div[data-baseweb="base-input"] {{
-    background-color: {input_bg} !important;
+div[data-baseweb="base-input"],
+div[data-baseweb="base-input"] > div,
+[data-testid="stSelectbox"] div[data-baseweb="select"] > div,
+[data-testid="stNumberInput"] div[data-baseweb="input"],
+[data-testid="stTextInput"] div[data-baseweb="input"] {{
+    background-color: var(--input-bg) !important;
+    background: var(--input-bg) !important;
+    border-color: var(--input-border) !important;
     border-radius: 12px !important;
-    border: 1.5px solid {glass_border} !important;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+    color: var(--input-text) !important;
 }}
-div[data-baseweb="select"] *,
-div[data-baseweb="input"] *,
+
+/* Input içi metin rengi ve imleç */
+div[data-baseweb="select"] span,
+div[data-baseweb="select"] p,
+div[data-baseweb="input"] input,
+div[data-baseweb="base-input"] input,
 input, textarea, select {{
-    color: {input_text} !important;
+    color: var(--input-text) !important;
+    -webkit-text-fill-color: var(--input-text) !important;
     background-color: transparent !important;
 }}
-div[data-baseweb="select"] > div:hover,
-div[data-baseweb="input"] > div:focus-within {{
-    border-color: #6366F1 !important;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25) !important;
+
+/* Selectbox ok simgesi */
+div[data-baseweb="select"] svg,
+div[data-baseweb="select"] svg path {{
+    fill: var(--input-text) !important;
+    color: var(--input-text) !important;
+}}
+
+/* Açılır Menü Popover Listesi (Dropdown) */
+div[data-baseweb="popover"],
+div[data-baseweb="menu"],
+ul[role="listbox"],
+li[role="option"] {{
+    background-color: var(--card-bg) !important;
+    background: var(--card-bg) !important;
+    color: var(--input-text) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+}}
+li[role="option"] * {{
+    color: var(--input-text) !important;
+}}
+li[role="option"]:hover,
+li[role="option"][aria-selected="true"] {{
+    background-color: var(--stepper-hover) !important;
 }}
 
 /* Sayı Arttırma / Azaltma (+ ve -) Butonları */
 div[data-baseweb="input"] button {{
-    background-color: {stepper_bg} !important;
-    border-radius: 8px !important;
+    background-color: var(--stepper-bg) !important;
+    background: var(--stepper-bg) !important;
     border: none !important;
+    border-radius: 8px !important;
 }}
 div[data-baseweb="input"] button:hover {{
-    background-color: {stepper_hover} !important;
+    background-color: var(--stepper-hover) !important;
 }}
-div[data-baseweb="input"] button svg {{
-    fill: {input_text} !important;
-    color: {input_text} !important;
+div[data-baseweb="input"] button svg,
+div[data-baseweb="input"] button svg path {{
+    fill: var(--input-text) !important;
+    color: var(--input-text) !important;
 }}
 
-/* 8. Radio Butonlar */
+/* ==================================================================== */
+/* 9. TABLOLAR (SIDEBAR RECALL VE TOPLU DEĞERLENDİRME)                   */
+/* ==================================================================== */
+[data-testid="stTable"],
+[data-testid="stTable"] table,
+.stTable,
+[data-testid="stDataFrame"],
+[data-testid="stDataFrame"] > div {{
+    background-color: var(--table-bg) !important;
+    background: var(--table-bg) !important;
+    color: var(--table-text) !important;
+    border-radius: 12px !important;
+    border: 1.5px solid var(--border-color) !important;
+    overflow: hidden !important;
+}}
+[data-testid="stTable"] th {{
+    background-color: var(--table-header-bg) !important;
+    color: var(--text-color) !important;
+    font-weight: 700 !important;
+    padding: 8px 12px !important;
+    border-bottom: 1.5px solid var(--border-color) !important;
+}}
+[data-testid="stTable"] td {{
+    background-color: var(--table-cell-bg) !important;
+    color: var(--table-text) !important;
+    padding: 8px 12px !important;
+    border-bottom: 1px solid var(--border-color) !important;
+}}
+[data-testid="stTable"] tr:last-child td {{
+    border-bottom: none !important;
+}}
+[data-testid="stDataFrame"] * {{
+    color: var(--table-text) !important;
+}}
+
+/* ==================================================================== */
+/* 10. RADYO BUTONLARI VE SEÇENEKLER                                    */
+/* ==================================================================== */
 div[data-testid="stRadio"] label,
 div[data-testid="stRadio"] label *,
 div[data-testid="stRadio"] span,
 div[data-testid="stRadio"] p {{
-    color: {text_color} !important;
+    color: var(--text-color) !important;
     font-weight: 600 !important;
 }}
 
-/* 9. Dosya Yükleyici (File Uploader) */
+/* ==================================================================== */
+/* 11. DOSYA YÜKLEYİCİ (FILE UPLOADER) GLASSMORPHISM                    */
+/* ==================================================================== */
 [data-testid="stFileUploader"] {{
-    background: {glass_bg} !important;
-    border: 2px dashed {glass_border} !important;
+    background: var(--card-bg) !important;
+    border: 2px dashed var(--border-color) !important;
     border-radius: 18px !important;
     padding: 16px !important;
+    backdrop-filter: blur(14px) !important;
+    -webkit-backdrop-filter: blur(14px) !important;
 }}
 [data-testid="stFileUploaderDropzone"],
-[data-testid="stFileUploader"] section {{
-    background-color: {input_bg} !important;
-    border: 1px dashed {glass_border} !important;
+[data-testid="stFileUploader"] section,
+[data-testid="stFileUploader"] section > div {{
+    background-color: var(--input-bg) !important;
+    background: var(--input-bg) !important;
+    border: 1px dashed var(--input-border) !important;
     border-radius: 14px !important;
 }}
 [data-testid="stFileUploader"] *,
 [data-testid="stFileUploaderDropzone"] *,
 [data-testid="stFileUploader"] section * {{
-    color: {text_color} !important;
-}}
-[data-testid="stFileUploader"] button {{
-    background: {btn_sec_bg} !important;
-    color: {btn_sec_text} !important;
-    border: 1px solid {glass_border} !important;
-    border-radius: 10px !important;
+    color: var(--text-color) !important;
 }}
 
-/* 10. Sekmeler (Tabs - Material 3 Segmented Control) */
+/* ==================================================================== */
+/* 12. MATERIAL YOU BUTONLARI (PRIMARY & SECONDARY)                     */
+/* ==================================================================== */
+.stButton > button {{
+    border-radius: 9999px !important;
+    font-weight: 700 !important;
+    padding: 10px 24px !important;
+    letter-spacing: 0.3px !important;
+    transition: all 0.2s ease !important;
+}}
+/* Birincil Butonlar */
+.stButton > button[kind="primary"],
+.stButton > button[data-testid="baseButton-primary"] {{
+    background: var(--accent-gradient) !important;
+    color: #FFFFFF !important;
+    border: none !important;
+    box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35) !important;
+}}
+.stButton > button[kind="primary"] * {{
+    color: #FFFFFF !important;
+}}
+/* İkincil Butonlar (Tema Değiştirici vb.) */
+.stButton > button[kind="secondary"],
+.stButton > button[data-testid="baseButton-secondary"],
+.stButton > button:not([kind="primary"]) {{
+    background-color: var(--btn-sec-bg) !important;
+    background: var(--btn-sec-bg) !important;
+    color: var(--text-color) !important;
+    border: 1.5px solid var(--border-color) !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+}}
+.stButton > button:not([kind="primary"]):hover {{
+    background-color: var(--stepper-hover) !important;
+    border-color: var(--accent-color) !important;
+    transform: translateY(-1px) !important;
+}}
+.stButton > button:not([kind="primary"]) * {{
+    color: var(--text-color) !important;
+}}
+
+/* ==================================================================== */
+/* 13. SEKMELER (TABS - MATERIAL 3 SEGMENTED CONTROL)                   */
+/* ==================================================================== */
 .stTabs [data-baseweb="tab-list"] {{
     gap: 8px;
-    background: {glass_bg} !important;
+    background: var(--card-bg) !important;
     padding: 6px;
     border-radius: 16px;
-    border: 1.5px solid {glass_border};
+    border: 1.5px solid var(--border-color);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
 }}
 .stTabs [data-baseweb="tab"] {{
     border-radius: 12px;
@@ -419,11 +597,11 @@ div[data-testid="stRadio"] p {{
 .stTabs [data-baseweb="tab"] *,
 .stTabs [data-baseweb="tab"] p,
 .stTabs [data-baseweb="tab"] span {{
-    color: {subtext_color} !important;
+    color: var(--subtext-color) !important;
     font-weight: 600 !important;
 }}
 .stTabs [aria-selected="true"] {{
-    background: {accent_gradient} !important;
+    background: var(--accent-gradient) !important;
     box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35) !important;
 }}
 .stTabs [aria-selected="true"] *,
@@ -433,85 +611,67 @@ div[data-testid="stRadio"] p {{
     font-weight: 800 !important;
 }}
 
-/* 11. Yuvarlak Material You Butonlar */
-.stButton > button {{
-    background: {accent_gradient} !important;
-    color: #FFFFFF !important;
-    border-radius: 9999px !important;
-    padding: 10px 28px !important;
-    font-weight: 700 !important;
-    border: none !important;
-    box-shadow: 0 4px 14px rgba(79, 70, 229, 0.3) !important;
-    transition: all 0.2s ease !important;
-}}
-.stButton > button:hover {{
-    transform: translateY(-2px) !important;
-    box-shadow: 0 8px 22px rgba(79, 70, 229, 0.45) !important;
-    color: #FFFFFF !important;
-}}
-.stButton > button * {{
-    color: #FFFFFF !important;
-}}
-
-/* 12. Kart Kapsayıcıları (Border Wrapper) */
+/* ==================================================================== */
+/* 14. KART KAPSAYICILARI (CONTAINER BORDER WRAPPER & GLASS CARD)       */
+/* ==================================================================== */
 [data-testid="stVerticalBlockBorderWrapper"] {{
-    background: {glass_bg} !important;
-    border: 1.5px solid {glass_border} !important;
+    background: var(--card-bg) !important;
+    border: 1.5px solid var(--border-color) !important;
     border-radius: 18px !important;
-    box-shadow: {glass_shadow} !important;
+    box-shadow: var(--card-shadow) !important;
     backdrop-filter: blur(16px) !important;
     -webkit-backdrop-filter: blur(16px) !important;
     padding: 18px !important;
     margin-bottom: 16px !important;
 }}
 .m3-glass-card {{
-    background: {glass_bg} !important;
-    border: 1.5px solid {glass_border} !important;
+    background: var(--card-bg) !important;
+    border: 1.5px solid var(--border-color) !important;
     border-radius: 18px !important;
     padding: 22px !important;
-    box-shadow: {glass_shadow} !important;
+    box-shadow: var(--card-shadow) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
 }}
 
-/* 13. Dataframe ve Tablolar */
-[data-testid="stDataFrame"],
-div[data-testid="stTable"] {{
-    background-color: {input_bg} !important;
-    border-radius: 14px !important;
-    border: 1.5px solid {glass_border} !important;
+/* ==================================================================== */
+/* 15. KOD KUTULARI (ST.CODE), SLIDER VE İŞARETÇİLER                    */
+/* ==================================================================== */
+code, pre, [data-testid="stMarkdownContainer"] code {{
+    background-color: var(--code-bg) !important;
+    color: var(--code-text) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 6px !important;
+    padding: 2px 6px !important;
 }}
-[data-testid="stDataFrame"] * {{
-    color: {text_color} !important;
-}}
-
-/* 14. Kod Kutusu (st.code) ve Slider */
 [data-testid="stCode"] {{
-    background-color: {input_bg} !important;
-    border: 1.5px solid {glass_border} !important;
+    background-color: var(--code-bg) !important;
+    border: 1.5px solid var(--border-color) !important;
     border-radius: 12px !important;
 }}
 [data-testid="stCode"] * {{
-    color: {text_color} !important;
+    color: var(--code-text) !important;
 }}
 div[data-testid="stSlider"] * {{
-    color: {text_color} !important;
+    color: var(--text-color) !important;
 }}
 </style>
 """, unsafe_allow_html=True)
 
 # Üst Başlık (Hero Glass Banner)
 st.markdown(f"""
-<div class="m3-glass-card" style="background: {hero_bg}; border: 1.5px solid {hero_badge_border}; padding: 26px 30px; margin-bottom: 22px;">
+<div class="m3-glass-card" style="background: var(--hero-bg); border: 1.5px solid var(--hero-badge-border); padding: 26px 30px; margin-bottom: 22px;">
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
         <div>
             <span style="display:inline-block; padding: 4px 14px; border-radius: 9999px; font-size: 0.78rem; font-weight: 700; 
-                         letter-spacing: 0.6px; text-transform: uppercase; background: {hero_badge_bg}; color: {hero_badge_text}; 
-                         border: 1px solid {hero_badge_border}; margin-bottom: 8px;">
+                         letter-spacing: 0.6px; text-transform: uppercase; background: var(--hero-badge-bg); color: var(--hero-badge-text); 
+                         border: 1px solid var(--hero-badge-border); margin-bottom: 8px;">
                 🏢 İNŞAAT MÜHENDİSLİĞİNDE YAPAY ZEKÂ UYGULAMALARI
             </span>
-            <h1 style="margin: 4px 0 8px 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px; color: {hero_title} !important;">
+            <h1 style="margin: 4px 0 8px 0; font-size: 2.2rem; font-weight: 800; letter-spacing: -0.5px; color: var(--hero-title) !important;">
                 Deprem Sonrası Hasar Tahmin Aracı
             </h1>
-            <p style="margin: 0; font-size: 0.96rem; max-width: 850px; line-height: 1.5; color: {hero_sub} !important;">
+            <p style="margin: 0; font-size: 0.96rem; max-width: 850px; line-height: 1.5; color: var(--hero-sub) !important;">
                 Tablodan öğrenen Random Forest sınıflandırıcısı ve fotoğraftan çatlak tespit eden Roboflow derin öğrenme modelini birleştiren hibrit karar destek sistemi.
             </p>
         </div>
@@ -531,7 +691,7 @@ except Exception as e:
 # ======================================================================
 with st.sidebar:
     # Tema Değiştirici (Light / Dark Mode Toggle)
-    col_t1, col_t2 = st.columns([2, 1.2])
+    col_t1, col_t2 = st.columns([1.8, 1.2])
     with col_t1:
         st.markdown(f"**Tema:** `{tema_ad}`")
     with col_t2:
@@ -549,7 +709,8 @@ with st.sidebar:
         st.metric("5-Katlı CV", f"{m['cv_dogrulugu']:.3f}")
     
     st.markdown("**Sınıf Bazında Recall (Hassasiyet):**")
-    st.dataframe(pd.DataFrame({"recall": m["recall"]}).round(2), use_container_width=True)
+    # HTML tabanlı tablo (CSS değişkenleriyle %100 uyumlu, asla siyah canvas kalmaz)
+    st.table(pd.DataFrame({"Recall": m["recall"]}).round(2))
     st.caption(f"🌲 Parametreler: {meta['parametreler']}")
     
     st.markdown("---")
