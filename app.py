@@ -1005,69 +1005,29 @@ with sekme1:
         with st.container(border=True):
             st.markdown("### 📋 Yapısal Bina Parametreleri")
             
-            # Hızlı Hazır Senaryolar (Presets - Görsel 2 ve Tasarım 1 Hibrit)
-            st.markdown("<span style='font-size: 0.82rem; font-weight: 700; color: var(--subtext-color);'>⚡ Hızlı Senaryo Doldur:</span>", unsafe_allow_html=True)
-            col_p1, col_p2, col_p3 = st.columns(3)
-            with col_p1:
-                if st.button("🏢 Az Hasarlı", use_container_width=True):
-                    st.session_state["val_yapi"] = "Betonarme"
-                    st.session_state["val_kat"] = 5
-                    st.session_state["val_yil"] = 2008
-                    st.session_state["val_bolge"] = "2. Derece"
-                    st.session_state["val_pga"] = 0.22
-                    st.session_state["val_defo"] = 0.60
-                    st.session_state["val_dos"] = 0
-                    st.session_state["val_kol"] = 0
-                    st.rerun()
-            with col_p2:
-                if st.button("🏚️ Ağır Hasarlı", use_container_width=True):
-                    st.session_state["val_yapi"] = "Yığma"
-                    st.session_state["val_kat"] = 3
-                    st.session_state["val_yil"] = 1985
-                    st.session_state["val_bolge"] = "1. Derece"
-                    st.session_state["val_pga"] = 0.50
-                    st.session_state["val_defo"] = 3.20
-                    st.session_state["val_dos"] = 1
-                    st.session_state["val_kol"] = 1
-                    st.rerun()
-            with col_p3:
-                if st.button("🔄 Sıfırla", use_container_width=True):
-                    for k in ["val_yapi", "val_kat", "val_yil", "val_bolge", "val_pga", "val_defo", "val_dos", "val_kol"]:
-                        st.session_state.pop(k, None)
-                    st.rerun()
-
-            st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
-
-            cur_yapi = st.session_state.get("val_yapi", "Betonarme")
-            yapi_idx = meta["yapi_turleri"].index(cur_yapi) if cur_yapi in meta["yapi_turleri"] else 0
-            yapi = st.selectbox("🏢 Yapı türü", meta["yapi_turleri"], index=yapi_idx)
+            yapi = st.selectbox("🏢 Yapı türü", meta["yapi_turleri"], 
+                                index=meta["yapi_turleri"].index("Betonarme") if "Betonarme" in meta["yapi_turleri"] else 0)
             
             c_k1, c_k2 = st.columns(2)
             with c_k1:
-                kat = st.number_input("🗂️ Kat sayısı", min_value=1, max_value=60, 
-                                      value=int(st.session_state.get("val_kat", 5)), step=1)
+                kat = st.number_input("🗂️ Kat sayısı", min_value=1, max_value=60, value=5, step=1)
             with c_k2:
-                yil = st.number_input("📅 İnşaat yılı", min_value=1800, max_value=2030, 
-                                      value=int(st.session_state.get("val_yil", 1995)), step=1)
+                yil = st.number_input("📅 İnşaat yılı", min_value=1800, max_value=2030, value=1995, step=1)
             
-            cur_bolge = st.session_state.get("val_bolge", meta["deprem_bolgeleri"][0])
-            bolge_idx = meta["deprem_bolgeleri"].index(cur_bolge) if cur_bolge in meta["deprem_bolgeleri"] else 0
-            bolge = st.selectbox("📍 Deprem bölgesi", meta["deprem_bolgeleri"], index=bolge_idx)
+            bolge = st.selectbox("📍 Deprem bölgesi", meta["deprem_bolgeleri"])
             
             c_p1, c_p2 = st.columns(2)
             with c_p1:
-                pga = st.number_input("〰️ Beklenen PGA (g)", min_value=0.0, max_value=2.0, 
-                                      value=float(st.session_state.get("val_pga", 0.30)), step=0.01)
+                pga = st.number_input("〰️ Beklenen PGA (g)", min_value=0.0, max_value=2.0, value=0.30, step=0.01)
             with c_p2:
-                defo = st.number_input("📈 Deformasyon (%)", min_value=0.0, max_value=100.0, 
-                                       value=float(st.session_state.get("val_defo", 1.0)), step=0.1)
+                defo = st.number_input("📈 Deformasyon (%)", min_value=0.0, max_value=100.0, value=1.0, step=0.1)
             
             c_d1, c_d2 = st.columns(2)
             with c_d1:
-                dos = st.radio("📐 Döşeme hasarı", [0, 1], index=int(st.session_state.get("val_dos", 0)), 
+                dos = st.radio("📐 Döşeme hasarı", [0, 1], index=0, 
                                format_func=lambda v: "Var" if v else "Yok", horizontal=True)
             with c_d2:
-                kol = st.radio("🏛️ Kolon hasarı", [0, 1], index=int(st.session_state.get("val_kol", 0)), 
+                kol = st.radio("🏛️ Kolon hasarı", [0, 1], index=0, 
                                format_func=lambda v: "Var" if v else "Yok", horizontal=True)
 
     with sag:
