@@ -97,6 +97,23 @@ def goruntu_yukle(yuklenen_dosya):
     return img
 
 
+def model_id_temizle(girdi: str) -> str:
+    """Roboflow model kimliğini veya Universe URL'sini proje/surum formatına çevirir."""
+    s = girdi.strip()
+    if "universe.roboflow.com" in s:
+        parts = s.split("universe.roboflow.com")[-1].strip("/").split("/")
+        if len(parts) >= 4 and parts[2] == "model":
+            return f"{parts[1]}/{parts[3]}"
+        elif len(parts) >= 3:
+            return f"{parts[1]}/{parts[2]}"
+        elif len(parts) == 2:
+            return f"{parts[0]}/{parts[1]}"
+    parts = s.split("/")
+    if len(parts) == 3:
+        return f"{parts[1]}/{parts[2]}"
+    return s
+
+
 def tespit_et(img: Image.Image, model_id: str = VARSAYILAN_ROBOFLOW_MODEL_ID, guven_esigi: float = GUVEN_ESIGI):
     """Görüntüyü seçilen Roboflow modeline gönderir ve supervision Detections döner."""
     key = api_anahtari()
@@ -105,7 +122,12 @@ def tespit_et(img: Image.Image, model_id: str = VARSAYILAN_ROBOFLOW_MODEL_ID, gu
 
     client = roboflow_istemcisi(key)
     img_np = np.array(img)
-    sonuc = client.infer(img_np, model_id=model_id)
+    temiz_model_id = model_id_temizle(model_id)
+    try:
+        sonuc = client.infer(img_np, model_id=temiz_model_id)
+    except Exception as e:
+        raise RuntimeError(f"Roboflow modeli ('{temiz_model_id}') çağrılırken hata oluştu: {e}. "
+                           "Model kimliğinin doğru ve Roboflow Universe üzerinde açık (public) olduğundan emin olun.")
     det = sv.Detections.from_inference(sonuc)
     if len(det) > 0 and guven_esigi > 0:
         det = det[det.confidence >= guven_esigi]
@@ -911,28 +933,62 @@ with st.sidebar:
     st.write("**Sınıf Bazında Recall:**")
     st.dataframe(pd.DataFrame({"Recall": m["recall"]}).round(2), use_container_width=True)
     st.caption(f"Parametreler: {meta['parametreler']}")
-    st.table(pd.DataFrame({"Recall": m["recall"]}).round(2))
-    st.caption(f"🌲 Parametreler: {meta['parametreler']}")
     
+    # Model Listesi Session State (İsteyen kişinin model ekleyebilmesi için)
+    if "ekli_modeller" not in st.session_state:
+        st.session_state.ekli_modeller = dict(GUCLU_MODELLER)
+    if "secili_model_etiket" not in st.session_state:
+        st.session_state.secili_model_etiket = list(st.session_state.ekli_modeller.keys())[0]
+
     st.markdown("---")
     st.markdown("### 🔍 Çatlak Tespiti (Roboflow)")
     
-    model_secenekleri = list(GUCLU_MODELLER.keys()) + ["✨ Özel Model ID Gir (Universe'ten)"]
+    secenekler = list(st.session_state.ekli_modeller.keys()) + ["✍️ Manuel Model ID / Link Gir"]
+    secim_index = 0
+    if st.session_state.secili_model_etiket in secenekler:
+        secim_index = secenekler.index(st.session_state.secili_model_etiket)
+
     model_secim = st.selectbox(
-        "Roboflow Çatlak Modeli Seçin",
-        options=model_secenekleri,
-        index=0,
-        help="Hazır 4 güçlü modelden birini seçebilir veya kendi model kimliğinizi yazabilirsiniz."
+        "Kullanılacak Çatlak Modeli:",
+        options=secenekler,
+        index=secim_index,
+        key=f"sb_model_v_{len(st.session_state.ekli_modeller)}",
+        help="Hazır 4 modelden birini seçebilir, manuel girebilir veya aşağıdan dilediğiniz modeli ekleyebilirsiniz."
     )
+    st.session_state.secili_model_etiket = model_secim
     
-    if model_secim == "✨ Özel Model ID Gir (Universe'ten)":
-        ozel_id = st.text_input("Özel Model Kimliği (proje/sürüm):", value="wall-crack-detection-l0iit/4",
-                                help="Universe'teki herhangi bir çatlak tespit modelinin proje/sürüm kimliğini girin.")
-        aktif_model_id = ozel_id.strip() if ozel_id.strip() else "wall-crack-detection-l0iit/4"
+    if model_secim == "✍️ Manuel Model ID / Link Gir":
+        ozel_id = st.text_input("Roboflow Model Kimliği veya Linki:", value="wall-crack-detection-l0iit/4",
+                                help="Universe'teki model kimliğini (örn: 'proje-adi/surum') veya tam URL'sini girin.")
+        aktif_model_id = model_id_temizle(ozel_id)
         st.info(f"Kullanılan Model: `{aktif_model_id}`")
     else:
-        aktif_model_id = GUCLU_MODELLER[model_secim]
+        aktif_model_id = st.session_state.ekli_modeller[model_secim]
         st.code(aktif_model_id, language="text")
+
+    # İsteyen Kişinin Kendi Modelini Ekleyebileceği Alan (st.form ile güvenli)
+    with st.expander("➕ Yeni Roboflow Modeli Ekle"):
+        st.caption("Roboflow Universe'ten dilediğiniz bir çatlak tespit modelini ekleyerek test edebilirsiniz.")
+        with st.form("yeni_model_formu", clear_on_submit=True):
+            yeni_ad = st.text_input("Model Adı / Başlığı:", placeholder="Örn: 5. Özel Duvar Çatlak Modeli")
+            yeni_id = st.text_input("Model Kimliği veya Linki:", placeholder="Örn: eunsil/hs3464 veya proje/1")
+            kaydet = st.form_submit_button("Listeye Ekle ve Seç", use_container_width=True)
+            if kaydet:
+                temiz = model_id_temizle(yeni_id)
+                if not yeni_id.strip() or "/" not in temiz:
+                    st.error("Lütfen geçerli bir model kimliği girin (örn: 'proje/surum').")
+                else:
+                    etiket = yeni_ad.strip() if yeni_ad.strip() else f"Özel Model ({temiz})"
+                    st.session_state.ekli_modeller[etiket] = temiz
+                    st.session_state.secili_model_etiket = etiket
+                    st.success(f"'{etiket}' başarıyla listeye eklendi ve seçildi!")
+                    st.rerun()
+        
+        if len(st.session_state.ekli_modeller) > len(GUCLU_MODELLER):
+            if st.button("Eklenen Modelleri Sıfırla", use_container_width=True):
+                st.session_state.ekli_modeller = dict(GUCLU_MODELLER)
+                st.session_state.secili_model_etiket = list(GUCLU_MODELLER.keys())[0]
+                st.rerun()
 
     guven_esigi_secim = st.slider("Güven Eşiği (Confidence)", min_value=0.10, max_value=0.90, value=float(GUVEN_ESIGI), step=0.05)
     st.caption(f"Hesaplama Kuralı: `{CATLAK_KURALI.__name__}` (İnşaat Hasar Ölçeği)")
