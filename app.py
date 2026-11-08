@@ -200,9 +200,9 @@ def aralik_uyarilari(meta, bilgi):
 # ======================================================================
 st.set_page_config(page_title="Deprem Hasar Tahmin Aracı", page_icon="🏢", layout="wide")
 
-# Tema Durumu (Koyu / Açık Mod Toggle)
+# Tema Durumu (Koyu / Açık Mod Toggle - Varsayılan: Açık Mod)
 if "koyu_tema" not in st.session_state:
-    st.session_state.koyu_tema = True
+    st.session_state.koyu_tema = False
 
 # Tema Renk Değişkenleri (CSS Variables Sözlüğü)
 if st.session_state.koyu_tema:
@@ -889,31 +889,7 @@ except Exception as e:
 # 4. KENAR ÇUBUĞU (SIDEBAR - GLASS NEON & MATERIAL YOU)
 # ======================================================================
 with st.sidebar:
-    # 1. Logo & Marka Kartı
-    st.markdown(f"""
-    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding: 4px;">
-        <div style="width: 44px; height: 44px; border-radius: 14px; background: var(--accent-gradient); display: flex; align-items: center; justify-content: center; box-shadow: var(--neon-glow);">
-            <span style="font-size: 22px;">🏢</span>
-        </div>
-        <div>
-            <div style="font-size: 1.18rem; font-weight: 800; letter-spacing: -0.3px; color: var(--text-color); line-height: 1.2;">Deprem AI</div>
-            <div style="font-size: 0.74rem; opacity: 0.8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--subtext-color);">Hasar Analiz Sistemi</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # 2. Sistem Durumu Kartı
-    st.markdown(f"""
-    <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-radius: 14px; background: var(--card-bg); border: 1.5px solid var(--border-color); margin-bottom: 14px;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #10B981; box-shadow: 0 0 10px #10B981;"></span>
-            <span style="font-size: 0.84rem; font-weight: 700; color: var(--text-color);">Sistem Aktif</span>
-        </div>
-        <span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 9999px; background: var(--badge-bg); border: 1px solid var(--badge-border); font-weight: 700; color: var(--accent-color);">RF v1.0.0</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # 3. Tema Değiştirici (Light / Dark Mode Toggle)
+    # Tema Değiştirici (Light / Dark Mode Toggle)
     col_t1, col_t2 = st.columns([1.7, 1.3])
     with col_t1:
         st.markdown(f"**Tema:** `{tema_ad}`")
@@ -923,26 +899,18 @@ with st.sidebar:
             st.rerun()
 
     st.markdown("---")
-    st.markdown("### 📊 Model Performansı")
+    st.header("Model Performansı")
     m = meta["metrikler"]
     
-    # Modern Metrik Kartları (Trend Rozetleri ile)
-    st.markdown(f"""
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-        <div style="background: var(--metric-bg); border: 1.5px solid var(--border-color); border-radius: 14px; padding: 10px 12px; backdrop-filter: blur(14px);">
-            <div style="font-size: 0.76rem; font-weight: 700; color: var(--subtext-color); margin-bottom: 4px;">Test Doğruluğu</div>
-            <div style="font-size: 1.35rem; font-weight: 800; color: var(--metric-val-color); line-height: 1.1;">{m['test_dogrulugu']:.3f}</div>
-            <div style="margin-top: 4px; display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 2px 6px; border-radius: 9999px; background: rgba(16, 185, 129, 0.15); color: #10B981;">↗ +%2.3</div>
-        </div>
-        <div style="background: var(--metric-bg); border: 1.5px solid var(--border-color); border-radius: 14px; padding: 10px 12px; backdrop-filter: blur(14px);">
-            <div style="font-size: 0.76rem; font-weight: 700; color: var(--subtext-color); margin-bottom: 4px;">5-Katlı CV</div>
-            <div style="font-size: 1.35rem; font-weight: 800; color: var(--metric-val-color); line-height: 1.1;">{m['cv_dogrulugu']:.3f}</div>
-            <div style="margin-top: 4px; display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 2px 6px; border-radius: 9999px; background: rgba(16, 185, 129, 0.15); color: #10B981;">↗ +%1.7</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    col_m1, col_m2 = st.columns(2)
+    with col_m1:
+        st.metric("Test Doğruluğu", f"{m['test_dogrulugu']:.3f}")
+    with col_m2:
+        st.metric("5-Katlı CV", f"{m['cv_dogrulugu']:.3f}")
     
-    st.markdown("**Sınıf Bazında Recall (Hassasiyet):**")
+    st.write("**Sınıf Bazında Recall:**")
+    st.dataframe(pd.DataFrame({"Recall": m["recall"]}).round(2), use_container_width=True)
+    st.caption(f"Parametreler: {meta['parametreler']}")
     st.table(pd.DataFrame({"Recall": m["recall"]}).round(2))
     st.caption(f"🌲 Parametreler: {meta['parametreler']}")
     
@@ -1033,20 +1001,6 @@ with sekme1:
     with sag:
         with st.container(border=True):
             st.markdown("### 📸 Duvar Hasar Fotoğrafı")
-            
-            # Viewfinder Köşe Çerçevesi (Yüksek Teknoloji Görsel Alanı)
-            st.markdown("""
-            <div class="viewfinder-box">
-                <div class="vf-corner-tl"></div>
-                <div class="vf-corner-tr"></div>
-                <div class="vf-corner-bl"></div>
-                <div class="vf-corner-br"></div>
-                <div style="font-size: 0.84rem; font-weight: 700; color: var(--subtext-color); margin-bottom: 8px;">
-                    🎯 Hasar Görsel Analiz Bölgesi
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
             foto = st.file_uploader("Duvar çatlak fotoğrafı yükleyin", type=["jpg", "jpeg", "png"], key="tek")
             if foto is not None:
                 st.image(foto, caption="Yüklenen Fotoğraf", use_container_width=True)
@@ -1083,32 +1037,14 @@ with sekme1:
                 renk = ETIKET_RENK.get(sinif, '#06B6D4')
                 en_yuksek_p = olasilik.get(sinif, 0.0)
                 
-                # Holografik Hasar Derecesi Kartı
-                st.markdown(f"""
-                <div style="background: var(--card-bg); border: 2px solid {renk}; border-radius: 18px; padding: 22px; box-shadow: 0 0 24px {renk}33; backdrop-filter: blur(20px); margin-bottom: 16px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <span style="font-size: 0.80rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; color: {renk};">
-                            ⚡ Tahmin Edilen Hasar Seviyesi
-                        </span>
-                        <span style="font-size: 0.76rem; font-weight: 700; padding: 4px 12px; border-radius: 9999px; background: {renk}22; color: {renk}; border: 1px solid {renk}55;">
-                            Güven Skoru: %{en_yuksek_p*100:.1f}
-                        </span>
-                    </div>
-                    <div style="font-size: 2.6rem; font-weight: 900; color: {renk}; letter-spacing: -0.5px; line-height: 1.1; margin-bottom: 8px;">
-                        {sinif}
-                    </div>
-                    <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.88rem; color: var(--subtext-color);">
-                        <span>Hesaplanan Çatlak Yoğunluğu:</span>
-                        <b style="color: var(--text-color); font-size: 1.05rem;">{catl:.2f} / 1.00</b>
-                    </div>
-                    <div style="width: 100%; height: 8px; background: var(--stepper-bg); border-radius: 9999px; margin-top: 8px; overflow: hidden;">
-                        <div style="width: {min(max(catl*100, 5), 100)}%; height: 100%; background: {renk}; border-radius: 9999px;"></div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                with st.container(border=True):
+                    st.metric("Hesaplanan Çatlak Yoğunluğu", f"{catl:.2f} / 1.00")
+                    st.markdown(f"### Tahmin Edilen Hasar Sınıfı: <span style='color:{renk}; font-weight:800;'>{sinif}</span>", unsafe_allow_html=True)
+                    st.caption(f"Model Tahmin Güveni: %{en_yuksek_p*100:.1f}")
+                    st.progress(float(min(max(catl, 0.0), 1.0)))
                 
                 with st.container(border=True):
-                    st.markdown("#### 📊 Sınıf Olasılık Dağılımı")
+                    st.markdown("#### Sınıf Olasılık Dağılımı")
                     st.bar_chart(pd.Series(olasilik).reindex(meta["sira"]))
 
 # --- Sekme 2: Toplu Değerlendirme ------------------------------------
